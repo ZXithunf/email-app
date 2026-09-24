@@ -1,0 +1,159 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Administrator user profile",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Unique user ID" },
+        "email": { "type": "string", "description": "Admin email address" },
+        "displayName": { "type": "string", "description": "Admin display name" },
+        "role": { "type": "string", "enum": ["admin", "superadmin"], "description": "User role" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Account creation timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Account updated timestamp" }
+      },
+      "required": ["uid", "email", "role", "createdAt"]
+    },
+    "Contact": {
+      "title": "Contact",
+      "description": "Recipient contact imported from Excel or created manually",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 150, "description": "Full name of contact" },
+        "email": { "type": "string", "maxLength": 200, "pattern": "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$", "description": "Email address" },
+        "phone": { "type": "string", "maxLength": 30, "description": "Phone or WhatsApp number" },
+        "company": { "type": "string", "maxLength": 150, "description": "Company or organization" },
+        "tags": { "type": "array", "description": "List of categorization tags" },
+        "status": { "type": "string", "enum": ["subscribed", "unsubscribed", "bounced"], "description": "Subscription status" },
+        "consentGiven": { "type": "boolean", "description": "Whether consent was given for messaging" },
+        "source": { "type": "string", "description": "Imported file name or manual" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Updated timestamp" }
+      },
+      "required": ["name", "email", "phone", "status", "createdAt"]
+    },
+    "Campaign": {
+      "title": "Campaign",
+      "description": "Automated recurring monthly campaign",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 200, "description": "Campaign name" },
+        "emailSubject": { "type": "string", "maxLength": 300, "description": "Subject line for email" },
+        "emailBody": { "type": "string", "maxLength": 20000, "description": "HTML or markdown body for email" },
+        "emailImageUrl": { "type": "string", "maxLength": 2000, "description": "Uploaded header or hero image URL for email" },
+        "smsBody": { "type": "string", "maxLength": 1600, "description": "SMS or WhatsApp message content" },
+        "smsImageUrl": { "type": "string", "maxLength": 2000, "description": "MMS / WhatsApp media image URL" },
+        "channels": { "type": "array", "description": "Delivery channels: email, sms, whatsapp" },
+        "recipientFilter": { "type": "object", "description": "Filter criteria such as tags or all" },
+        "recipientCount": { "type": "number", "description": "Total selected recipients count" },
+        "startDate": { "type": "string", "format": "date", "description": "Start date for campaign" },
+        "sendTime": { "type": "string", "maxLength": 10, "description": "Time of day to send (HH:mm)" },
+        "timezone": { "type": "string", "maxLength": 50, "description": "Timezone e.g. America/New_York or UTC" },
+        "monthlyRecurrence": { "type": "boolean", "description": "Whether campaign recurs monthly" },
+        "dayOfMonth": { "type": "number", "description": "Day of month (1-31) to trigger execution" },
+        "active": { "type": "boolean", "description": "Whether campaign is active" },
+        "lastSentAt": { "type": "string", "format": "date-time", "description": "Timestamp of last execution" },
+        "nextSendAt": { "type": "string", "format": "date-time", "description": "Timestamp of next scheduled execution" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Update timestamp" }
+      },
+      "required": ["name", "channels", "active", "dayOfMonth", "sendTime", "createdAt"]
+    },
+    "CampaignRecipient": {
+      "title": "CampaignRecipient",
+      "description": "Mapping of contacts selected for a campaign",
+      "type": "object",
+      "properties": {
+        "campaignId": { "type": "string", "maxLength": 128, "description": "Associated campaign ID" },
+        "contactId": { "type": "string", "maxLength": 128, "description": "Associated contact ID" },
+        "contactName": { "type": "string", "maxLength": 150, "description": "Cached contact name" },
+        "contactEmail": { "type": "string", "maxLength": 200, "description": "Cached contact email" },
+        "contactPhone": { "type": "string", "maxLength": 30, "description": "Cached contact phone" },
+        "addedAt": { "type": "string", "format": "date-time", "description": "When added to campaign" }
+      },
+      "required": ["campaignId", "contactId", "addedAt"]
+    },
+    "MessageLog": {
+      "title": "MessageLog",
+      "description": "Audit record for every delivery attempt",
+      "type": "object",
+      "properties": {
+        "campaignId": { "type": "string", "maxLength": 128, "description": "Origin campaign ID" },
+        "campaignName": { "type": "string", "maxLength": 200, "description": "Campaign title" },
+        "contactId": { "type": "string", "maxLength": 128, "description": "Target contact ID" },
+        "contactName": { "type": "string", "maxLength": 150, "description": "Recipient name" },
+        "destination": { "type": "string", "maxLength": 200, "description": "Email address or phone number" },
+        "channel": { "type": "string", "enum": ["email", "sms", "whatsapp"], "description": "Communication channel" },
+        "provider": { "type": "string", "enum": ["amazon_ses", "twilio", "simulator"], "description": "Provider used" },
+        "providerMessageId": { "type": "string", "maxLength": 255, "description": "Provider assigned message identifier" },
+        "monthCycle": { "type": "string", "maxLength": 7, "description": "Year-Month cycle identifier e.g. 2026-09" },
+        "status": { "type": "string", "enum": ["queued", "sent", "failed", "skipped_duplicate"], "description": "Delivery status" },
+        "error": { "type": "string", "maxLength": 1000, "description": "Error details if failed" },
+        "scheduledAt": { "type": "string", "format": "date-time", "description": "Scheduled timestamp" },
+        "sentAt": { "type": "string", "format": "date-time", "description": "Actual delivery timestamp" }
+      },
+      "required": ["campaignId", "contactId", "channel", "monthCycle", "status", "scheduledAt"]
+    },
+    "Template": {
+      "title": "Template",
+      "description": "Pre-crafted message template for email, SMS, or WhatsApp",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 150, "description": "Template name" },
+        "category": { "type": "string", "maxLength": 100, "description": "Template category" },
+        "channel": { "type": "string", "enum": ["email", "sms", "whatsapp"], "description": "Applicable channel" },
+        "subject": { "type": "string", "maxLength": 300, "description": "Subject line for email template" },
+        "content": { "type": "string", "maxLength": 20000, "description": "Template body with {{placeholders}}" },
+        "variables": { "type": "array", "description": "List of available variables" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Update timestamp" }
+      },
+      "required": ["name", "channel", "content", "createdAt"]
+    },
+    "Setting": {
+      "title": "Setting",
+      "description": "Platform settings and provider configurations",
+      "type": "object",
+      "properties": {
+        "sesRegion": { "type": "string", "maxLength": 50, "description": "AWS Region for SES" },
+        "sesFromEmail": { "type": "string", "maxLength": 200, "description": "Verified From email address" },
+        "twilioPhone": { "type": "string", "maxLength": 30, "description": "Twilio sender phone number" },
+        "twilioWhatsAppNumber": { "type": "string", "maxLength": 30, "description": "Twilio WhatsApp sender number" },
+        "schedulerCron": { "type": "string", "maxLength": 50, "description": "Cron schedule expression" },
+        "rateLimitPerMinute": { "type": "number", "description": "Max dispatches per minute" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Last settings update timestamp" }
+      },
+      "required": ["updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Stores admin user profile records"
+    },
+    "/contacts/{contactId}": {
+      "schema": { "$ref": "#/entities/Contact" },
+      "description": "Stores contact directory records"
+    },
+    "/campaigns/{campaignId}": {
+      "schema": { "$ref": "#/entities/Campaign" },
+      "description": "Stores campaign specifications and monthly recurrence settings"
+    },
+    "/campaignRecipients/{recipientDocId}": {
+      "schema": { "$ref": "#/entities/CampaignRecipient" },
+      "description": "Stores campaign to contact recipient relations"
+    },
+    "/messageLogs/{logId}": {
+      "schema": { "$ref": "#/entities/MessageLog" },
+      "description": "Stores delivery attempt and deduplication audit logs"
+    },
+    "/templates/{templateId}": {
+      "schema": { "$ref": "#/entities/Template" },
+      "description": "Stores reusable email and SMS/WhatsApp templates"
+    },
+    "/settings/{settingId}": {
+      "schema": { "$ref": "#/entities/Setting" },
+      "description": "Stores system configuration documents"
+    }
+  }
+}

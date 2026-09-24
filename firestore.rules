@@ -1,0 +1,102 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128;
+    }
+
+    function isValidContact(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() <= 150 &&
+             data.email is string && data.email.size() > 3 && data.email.size() <= 200 &&
+             data.phone is string && data.phone.size() <= 30 &&
+             (data.status == 'subscribed' || data.status == 'unsubscribed' || data.status == 'bounced');
+    }
+
+    function isValidCampaign(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() <= 200 &&
+             data.channels is list && data.channels.size() > 0 && data.channels.size() <= 5 &&
+             data.active is bool &&
+             data.dayOfMonth is number && data.dayOfMonth >= 1 && data.dayOfMonth <= 31 &&
+             data.sendTime is string && data.sendTime.size() <= 10;
+    }
+
+    function isValidMessageLog(data) {
+      return data.campaignId is string && data.campaignId.size() <= 128 &&
+             data.contactId is string && data.contactId.size() <= 128 &&
+             (data.channel == 'email' || data.channel == 'sms' || data.channel == 'whatsapp') &&
+             data.monthCycle is string && data.monthCycle.size() <= 10 &&
+             (data.status == 'queued' || data.status == 'sent' || data.status == 'failed' || data.status == 'skipped_duplicate');
+    }
+
+    function isValidTemplate(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() <= 150 &&
+             (data.channel == 'email' || data.channel == 'sms' || data.channel == 'whatsapp') &&
+             data.content is string && data.content.size() <= 20000;
+    }
+
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Connection test document
+    match /test/{docId} {
+      allow read, write: if true;
+    }
+
+    // Users
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && (request.auth.uid == userId);
+    }
+
+    // Contacts
+    match /contacts/{contactId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidContact(request.resource.data);
+      allow update: if isSignedIn() && isValidContact(request.resource.data);
+      allow delete: if isSignedIn();
+    }
+
+    // Campaigns
+    match /campaigns/{campaignId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidCampaign(request.resource.data);
+      allow update: if isSignedIn() && isValidCampaign(request.resource.data);
+      allow delete: if isSignedIn();
+    }
+
+    // Campaign Recipients
+    match /campaignRecipients/{recipientId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isSignedIn();
+    }
+
+    // Message Logs (Immutable audit trail)
+    match /messageLogs/{logId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidMessageLog(request.resource.data);
+      allow update, delete: if false;
+    }
+
+    // Templates
+    match /templates/{templateId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidTemplate(request.resource.data);
+      allow update: if isSignedIn() && isValidTemplate(request.resource.data);
+      allow delete: if isSignedIn();
+    }
+
+    // Settings
+    match /settings/{settingId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn();
+      allow delete: if false;
+    }
+  }
+}

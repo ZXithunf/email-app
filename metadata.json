@@ -1,0 +1,7 @@
+{
+  "name": "Contact Automation Platform",
+  "description": "Production-ready full-stack platform for contact management, Excel imports, and automated recurring multi-channel email, SMS, and WhatsApp campaigns.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
