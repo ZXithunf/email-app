@@ -39,7 +39,9 @@ export interface FirestoreErrorInfo {
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
 export const auth = getAuth(app);
-export const db: Firestore = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+export const db: Firestore = (firebaseConfig as any).firestoreDatabaseId
+  ? getFirestore(app, (firebaseConfig as any).firestoreDatabaseId)
+  : getFirestore(app);
 export const storage = getStorage(app);
 
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null): never {
@@ -61,6 +63,29 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   };
   console.error('Firestore Error: ', JSON.stringify(errInfo));
   throw new Error(JSON.stringify(errInfo));
+}
+
+/**
+ * Recursively strips undefined fields from an object so Firestore operations (setDoc, updateDoc, writeBatch)
+ * do not fail with "Unsupported field value: undefined".
+ */
+export function removeUndefinedFields<T>(obj: T): T {
+  if (obj === null || obj === undefined) {
+    return obj;
+  }
+  if (Array.isArray(obj)) {
+    return obj.map(removeUndefinedFields) as unknown as T;
+  }
+  if (typeof obj === 'object' && (obj as any).constructor === Object) {
+    const cleaned: Record<string, any> = {};
+    for (const [key, value] of Object.entries(obj as Record<string, any>)) {
+      if (value !== undefined) {
+        cleaned[key] = removeUndefinedFields(value);
+      }
+    }
+    return cleaned as T;
+  }
+  return obj;
 }
 
 // Verify connection as mandated by the Firebase skill

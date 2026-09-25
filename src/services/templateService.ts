@@ -9,59 +9,57 @@ import {
   orderBy,
   onSnapshot,
 } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from './firebase';
+import { db, handleFirestoreError, OperationType, removeUndefinedFields } from './firebase';
 import { Contact, MessageTemplate } from '../types';
 
 const TEMPLATES_COLLECTION = 'templates';
 
 export const STARTER_TEMPLATES: Omit<MessageTemplate, 'id' | 'createdAt' | 'updatedAt'>[] = [
   {
-    name: 'Monthly Executive Newsletter',
+    name: 'Astrix Monthly Executive Newsletter',
     category: 'Newsletter',
     channel: 'email',
-    subject: 'Your Monthly Industry & Account Digest - {{company}}',
+    subject: 'Astrix Monthly Account & Industry Digest - {{company}}',
     content: `<h2>Hi {{name}},</h2>
-<p>Welcome to your monthly edition of the Executive Digest. Here is a summary of performance metrics and product highlights tailored for <strong>{{company}}</strong>.</p>
+<p>Welcome to your monthly edition of the <strong>Astrix</strong> Executive Digest. Here is a summary of performance metrics, system updates, and automated highlights tailored for <strong>{{company}}</strong>.</p>
 <hr />
-<h3>What's New This Month:</h3>
+<h3>What's New from Astrix This Month:</h3>
 <ul>
-  <li><strong>Feature Upgrades:</strong> Enhanced reporting and automated multi-channel messaging.</li>
-  <li><strong>Strategic Insights:</strong> How peer organizations are optimizing engagement cycles.</li>
+  <li><strong>Multi-Channel Dispatch:</strong> Automated SMS, WhatsApp, and Email delivery with Indian timezone support.</li>
+  <li><strong>Audience Segmentation:</strong> Enhanced targeting and intelligent duplicate suppression.</li>
 </ul>
 <p>If you have any questions or feedback, simply reply to this email.</p>
-<p>Best regards,<br />The Account Management Team</p>`,
+<p>Warm regards,<br /><strong>The Astrix Team</strong><br /><small style="color: #64748b;">Astrix Automation & Communications</small></p>`,
     variables: ['name', 'company', 'email'],
   },
   {
-    name: 'Monthly Billing & Subscription Notice',
+    name: 'Astrix Monthly Statement & Service Notice',
     category: 'Billing',
     channel: 'email',
-    subject: 'Monthly Account Statement for {{name}} - {{company}}',
+    subject: 'Astrix Monthly Service Statement for {{name}} - {{company}}',
     content: `<p>Hello {{name}},</p>
-<p>This is a friendly reminder that your monthly subscription renewal for {{company}} has been processed successfully.</p>
-<p>Your account remains fully active with unlimited automated dispatches.</p>
-<p>To view your detailed invoice or adjust payment methods, please access your billing portal.</p>
-<p>Thank you for partnering with us!</p>`,
+<p>This is a friendly confirmation from <strong>Astrix</strong> that your monthly service and subscription cycle for <strong>{{company}}</strong> has completed successfully.</p>
+<p>Your Astrix automated messaging pipeline remains fully active with zero dispatch disruptions.</p>
+<p>Thank you for partnering with <strong>Astrix</strong>!</p>
+<p>Best regards,<br /><strong>Astrix Account Services</strong></p>`,
     variables: ['name', 'company'],
   },
   {
-    name: 'SMS Monthly Check-in',
+    name: 'Astrix SMS Monthly Check-in',
     category: 'SMS Check-in',
     channel: 'sms',
-    content: `Hi {{name}}! This is your monthly check-in from our team. Everything is running smoothly for {{company}}. Reply YES if you'd like to schedule a 15-min review call. Text STOP to opt out.`,
+    content: `[Astrix] Hi {{name}}! This is your monthly check-in from Astrix for {{company}}. All systems and dispatches are active. Reply YES if you need support or text STOP to opt out.`,
     variables: ['name', 'company'],
   },
   {
-    name: 'WhatsApp Monthly Exclusive Update',
+    name: 'Astrix WhatsApp Monthly Briefing',
     category: 'WhatsApp',
     channel: 'whatsapp',
-    content: `👋 *Hello {{name}}!* 
+    content: `👋 *Hello {{name}} from Astrix!*
 
-Your monthly briefing for *{{company}}* is now live. We've unlocked new automation capabilities for your team this month.
+Your monthly account briefing for *{{company}}* is now live. All multi-channel automation pipelines are operating smoothly.
 
-Tap here to review details: https://app.contactautomation.io/digest
-
-_Reply STOP to unsubscribe at any time._`,
+_Message delivered by Astrix Automated Communications. Reply STOP to opt out._`,
     variables: ['name', 'company'],
   },
 ];
@@ -127,7 +125,7 @@ export async function createTemplate(
   };
 
   try {
-    await setDoc(doc(db, TEMPLATES_COLLECTION, id), templateDoc);
+    await setDoc(doc(db, TEMPLATES_COLLECTION, id), removeUndefinedFields(templateDoc));
     return templateDoc;
   } catch (error) {
     handleFirestoreError(error, OperationType.CREATE, `${TEMPLATES_COLLECTION}/${id}`);
@@ -140,10 +138,10 @@ export async function updateTemplate(
 ): Promise<void> {
   const now = new Date().toISOString();
   try {
-    await updateDoc(doc(db, TEMPLATES_COLLECTION, id), {
+    await updateDoc(doc(db, TEMPLATES_COLLECTION, id), removeUndefinedFields({
       ...data,
       updatedAt: now,
-    });
+    }));
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, `${TEMPLATES_COLLECTION}/${id}`);
   }

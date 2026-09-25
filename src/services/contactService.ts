@@ -11,7 +11,7 @@ import {
   orderBy,
   onSnapshot,
 } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from './firebase';
+import { db, handleFirestoreError, OperationType, removeUndefinedFields } from './firebase';
 import { Contact, ValidatedImportRecord } from '../types';
 
 const CONTACTS_COLLECTION = 'contacts';
@@ -55,7 +55,7 @@ export async function addContact(data: Omit<Contact, 'id' | 'createdAt' | 'updat
   };
 
   try {
-    await setDoc(doc(db, CONTACTS_COLLECTION, contactId), contactDoc);
+    await setDoc(doc(db, CONTACTS_COLLECTION, contactId), removeUndefinedFields(contactDoc));
     return contactDoc;
   } catch (error) {
     handleFirestoreError(error, OperationType.CREATE, `${CONTACTS_COLLECTION}/${contactId}`);
@@ -65,10 +65,10 @@ export async function addContact(data: Omit<Contact, 'id' | 'createdAt' | 'updat
 export async function updateContact(id: string, data: Partial<Omit<Contact, 'id' | 'createdAt'>>): Promise<void> {
   const now = new Date().toISOString();
   try {
-    await updateDoc(doc(db, CONTACTS_COLLECTION, id), {
+    await updateDoc(doc(db, CONTACTS_COLLECTION, id), removeUndefinedFields({
       ...data,
       updatedAt: now,
-    });
+    }));
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, `${CONTACTS_COLLECTION}/${id}`);
   }

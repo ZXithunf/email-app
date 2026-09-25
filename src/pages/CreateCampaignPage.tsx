@@ -21,25 +21,17 @@ import { fetchTemplates } from '../services/templateService';
 import { uploadCampaignImage } from '../services/storageService';
 import { useToast } from '../contexts/ToastContext';
 import { ActivePage } from '../components/layout/AppLayout';
+import {
+  TIMEZONE_OPTIONS,
+  getCurrentTimeInZone,
+  isIndianTimezone,
+  formatInTimezone,
+  getTimezoneShortLabel,
+} from '../utils/timezoneUtils';
 
 interface CreateCampaignPageProps {
   onNavigate: (page: ActivePage, campaignId?: string) => void;
 }
-
-const COMMON_TIMEZONES = [
-  'UTC',
-  'America/New_York',
-  'America/Chicago',
-  'America/Denver',
-  'America/Los_Angeles',
-  'Europe/London',
-  'Europe/Paris',
-  'Asia/Dubai',
-  'Asia/Kolkata',
-  'Asia/Singapore',
-  'Asia/Tokyo',
-  'Australia/Sydney',
-];
 
 export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onNavigate }) => {
   const { success, error: toastError } = useToast();
@@ -62,7 +54,7 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onNaviga
   const [smsImageUrl, setSmsImageUrl] = useState('');
 
   // Audience
-  const [audienceType, setAudienceType] = useState<'all' | 'tags' | 'company' | 'manual'>('all');
+  const [audienceType, setAudienceType] = useState<'all' | 'india' | 'tags' | 'company' | 'manual'>('all');
   const [selectedTag, setSelectedTag] = useState('');
   const [selectedCompany, setSelectedCompany] = useState('');
   const [selectedContactIds, setSelectedContactIds] = useState<Set<string>>(new Set());
@@ -70,7 +62,7 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onNaviga
   // Recurrence
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [sendTime, setSendTime] = useState('09:00');
-  const [timezone, setTimezone] = useState('UTC');
+  const [timezone, setTimezone] = useState('Asia/Kolkata');
   const [monthlyRecurrence, setMonthlyRecurrence] = useState(true);
   const [dayOfMonth, setDayOfMonth] = useState<number>(1);
   const [active, setActive] = useState(true);
@@ -99,6 +91,17 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onNaviga
   const targetContacts = useMemo(() => {
     const subscribed = contacts.filter((c) => c.status === 'subscribed');
     if (audienceType === 'all') return subscribed;
+    if (audienceType === 'india') {
+      return subscribed.filter((c) => {
+        const phone = (c.phone || '').trim();
+        return (
+          phone.startsWith('+91') ||
+          phone.startsWith('91') ||
+          phone.startsWith('=91') ||
+          phone.replace(/[^0-9]/g, '').length === 10
+        );
+      });
+    }
     if (audienceType === 'tags') {
       if (!selectedTag) return [];
       return subscribed.filter((c) => c.tags?.includes(selectedTag));
@@ -115,8 +118,8 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onNaviga
 
   // Preview next send date
   const nextSendPreview = useMemo(() => {
-    return calculateNextSendAt(dayOfMonth, sendTime);
-  }, [dayOfMonth, sendTime]);
+    return calculateNextSendAt(dayOfMonth, sendTime, undefined, timezone);
+  }, [dayOfMonth, sendTime, timezone]);
 
   const handleChannelToggle = (channel: ChannelType) => {
     if (channels.includes(channel)) {
@@ -196,31 +199,35 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onNaviga
 
     setIsSubmitting(true);
     try {
-      const newCampaign = await createCampaign(
-        {
-          name: name.trim(),
-          emailSubject: emailSubject.trim(),
-          emailBody: emailBody.trim(),
-          emailImageUrl: emailImageUrl.trim() || undefined,
-          smsBody: smsBody.trim(),
-          smsImageUrl: smsImageUrl.trim() || undefined,
-          channels,
-          recipientFilter: {
-            type: audienceType,
-            tags: audienceType === 'tags' && selectedTag ? [selectedTag] : undefined,
-            company: audienceType === 'company' ? selectedCompany : undefined,
-            contactIds: audienceType === 'manual' ? Array.from(selectedContactIds) : undefined,
-          },
-          recipientCount: targetContacts.length,
-          startDate,
-          sendTime,
-          timezone,
-          monthlyRecurrence,
-          dayOfMonth,
-          active,
+      const payload: any = {
+        name: name.trim(),
+        emailSubject: emailSubject.trim(),
+        emailBody: emailBody.trim(),
+        smsBody: smsBody.trim(),
+        channels,
+        recipientFilter: {
+          type: audienceType,
+          ...(audienceType === 'tags' && selectedTag ? { tags: [selectedTag] } : {}),
+          ...(audienceType === 'company' && selectedCompany ? { company: selectedCompany } : {}),
+          ...(audienceType === 'manual' ? { contactIds: Array.from(selectedContactIds) } : {}),
         },
-        targetContacts
-      );
+        recipientCount: targetContacts.length,
+        startDate,
+        sendTime,
+        timezone,
+        monthlyRecurrence,
+        dayOfMonth,
+        active,
+      };
+
+      if (emailImageUrl.trim()) {
+        payload.emailImageUrl = emailImageUrl.trim();
+      }
+      if (smsImageUrl.trim()) {
+        payload.smsImageUrl = smsImageUrl.trim();
+      }
+
+      const newCampaign = await createCampaign(payload, targetContacts);
 
       success('Campaign Created!', `"${newCampaign.name}" is scheduled for day ${dayOfMonth} monthly.`);
       onNavigate('campaign-details', newCampaign.id);
@@ -550,9 +557,10 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onNaviga
             </span>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
             {[
               { id: 'all', label: 'All Subscribed', desc: 'All active contacts' },
+              { id: 'india', label: '🇮🇳 India (+91)', desc: 'Indian mobile contacts' },
               { id: 'tags', label: 'By Tag', desc: 'Specific audience tags' },
               { id: 'company', label: 'By Company', desc: 'Filtered by account' },
               { id: 'manual', label: 'Manual Pick', desc: 'Choose individually' },
@@ -652,7 +660,7 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onNaviga
               5. Monthly Recurrence & Timing
             </h2>
             <span className="text-[11px] text-emerald-400 font-mono">
-              Next Send: {new Date(nextSendPreview).toLocaleDateString()} @ {sendTime}
+              Next Send: {formatInTimezone(nextSendPreview, timezone)} ({getTimezoneShortLabel(timezone)})
             </span>
           </div>
 
@@ -686,24 +694,66 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onNaviga
                 onChange={(e) => setSendTime(e.target.value)}
                 className="w-full px-3.5 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-indigo-500"
               />
+              <p className="text-[10px] text-slate-400 mt-1">Dispatch hour:minute</p>
             </div>
 
             {/* Timezone */}
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                Timezone *
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-semibold text-slate-300">
+                  Timezone *
+                </label>
+                {isIndianTimezone(timezone) && (
+                  <span className="text-[10px] font-semibold text-amber-400 bg-amber-500/10 px-1.5 py-0.2 rounded border border-amber-500/20">
+                    🇮🇳 IST
+                  </span>
+                )}
+              </div>
               <select
                 value={timezone}
                 onChange={(e) => setTimezone(e.target.value)}
-                className="w-full px-3.5 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-indigo-500"
+                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-indigo-500 font-medium"
               >
-                {COMMON_TIMEZONES.map((tz) => (
-                  <option key={tz} value={tz}>
-                    {tz}
-                  </option>
+                {Array.from(new Set(TIMEZONE_OPTIONS.map((t) => t.group))).map((group) => (
+                  <optgroup key={group} label={group} className="bg-slate-900 text-slate-300 font-bold">
+                    {TIMEZONE_OPTIONS.filter((t) => t.group === group).map((tz) => (
+                      <option key={tz.value} value={tz.value} className="bg-slate-800 text-white font-normal py-1">
+                        {tz.label}
+                      </option>
+                    ))}
+                  </optgroup>
                 ))}
               </select>
+
+              <div className="flex items-center gap-1.5 mt-1.5">
+                <button
+                  type="button"
+                  onClick={() => setTimezone('Asia/Kolkata')}
+                  className={`px-2 py-0.5 rounded text-[10px] font-semibold border transition-all ${
+                    timezone === 'Asia/Kolkata'
+                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-sm'
+                      : 'bg-slate-800/80 text-slate-400 border-slate-700 hover:text-white'
+                  }`}
+                >
+                  🇮🇳 Indian Standard Time (IST)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTimezone('UTC')}
+                  className={`px-2 py-0.5 rounded text-[10px] font-semibold border transition-all ${
+                    timezone === 'UTC'
+                      ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40 shadow-sm'
+                      : 'bg-slate-800/80 text-slate-400 border-slate-700 hover:text-white'
+                  }`}
+                >
+                  🌐 UTC
+                </button>
+              </div>
+
+              <p className="text-[10px] text-slate-400 mt-1 flex items-center gap-1">
+                <Clock className="w-3 h-3 text-slate-500 flex-shrink-0" />
+                <span>Current: <span className="text-slate-200 font-medium">{getCurrentTimeInZone(timezone)}</span></span>
+              </p>
             </div>
 
             {/* Start Date */}
@@ -717,6 +767,7 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onNaviga
                 onChange={(e) => setStartDate(e.target.value)}
                 className="w-full px-3.5 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-indigo-500"
               />
+              <p className="text-[10px] text-slate-400 mt-1">First active cycle date</p>
             </div>
           </div>
 

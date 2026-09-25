@@ -1,0 +1,22 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_FIREBASE_API_KEY: ${VITE_FIREBASE_API_KEY:-}
+        VITE_FIREBASE_AUTH_DOMAIN: ${VITE_FIREBASE_AUTH_DOMAIN:-ai-studio-contactautomatio-7c1bb953-82dd-48e1-816d-46364d4fab89.firebaseapp.com}
+        VITE_FIREBASE_PROJECT_ID: ${VITE_FIREBASE_PROJECT_ID:-ai-studio-contactautomatio-7c1bb953-82dd-48e1-816d-46364d4fab89}
+        VITE_FIREBASE_STORAGE_BUCKET: ${VITE_FIREBASE_STORAGE_BUCKET:-ai-studio-contactautomatio-7c1bb953-82dd-48e1-816d-46364d4fab89.firebasestorage.app}
+        VITE_FIREBASE_MESSAGING_SENDER_ID: ${VITE_FIREBASE_MESSAGING_SENDER_ID:-}
+        VITE_FIREBASE_APP_ID: ${VITE_FIREBASE_APP_ID:-}
+    container_name: astrix-contact-automation
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s

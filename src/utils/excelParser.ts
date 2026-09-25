@@ -2,7 +2,7 @@ import * as XLSX from 'xlsx';
 import { Contact, ValidatedImportRecord } from '../types';
 
 export const EMAIL_REGEX = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)+$/;
-export const PHONE_REGEX = /^\+?[0-9\s\-()]{7,25}$/;
+export const PHONE_REGEX = /^[=]?['"]?\+?[0-9\s\-().]{7,25}['"]?$/;
 
 export interface ParseExcelResult {
   records: ValidatedImportRecord[];
@@ -13,15 +13,44 @@ export interface ParseExcelResult {
 }
 
 /**
- * Normalizes phone numbers by stripping formatting characters and ensuring E.164 format
+ * Normalizes phone numbers by stripping formatting characters, Excel formula prefixes (= or ="), and ensuring E.164 format.
+ * Supports Indian mobile numbers with country code =91, +91, or 91.
  */
 export function normalizePhone(phone: string): string {
   if (!phone) return '';
-  const digitsAndPlus = phone.trim().replace(/[\s\-()]/g, '');
-  if (!digitsAndPlus.startsWith('+') && digitsAndPlus.length === 10) {
-    return '+1' + digitsAndPlus;
+  // Strip Excel formula equals sign (= or =" or =') and trailing quotes
+  let cleaned = String(phone).trim().replace(/^=['"]?/, '').replace(/['"]$/, '');
+  const hadPlus = cleaned.startsWith('+') || cleaned.startsWith('=+');
+
+  // Strip all non-digit characters to defend against SQL/script injection or corrupt formatting
+  const digitsOnly = cleaned.replace(/\D/g, '');
+
+  if (!digitsOnly || digitsOnly.length < 7 || digitsOnly.length > 15) {
+    return '';
   }
-  return digitsAndPlus;
+
+  // If already had a plus, format with plus
+  if (hadPlus) {
+    return '+' + digitsOnly;
+  }
+
+  // Indian numbers starting with 91 (12 digits, e.g., 919876543210)
+  if (digitsOnly.startsWith('91') && digitsOnly.length === 12) {
+    return '+' + digitsOnly;
+  }
+
+  // Indian numbers starting with leading 0 (11 digits, e.g., 09876543210)
+  if (digitsOnly.length === 11 && digitsOnly.startsWith('0') && /^[6-9]/.test(digitsOnly.slice(1))) {
+    return '+91' + digitsOnly.slice(1);
+  }
+
+  // 10-digit number (default NANP +1)
+  if (digitsOnly.length === 10) {
+    return '+1' + digitsOnly;
+  }
+
+  // Other international numbers with country code without plus (11-15 digits)
+  return '+' + digitsOnly;
 }
 
 /**
@@ -215,7 +244,7 @@ export async function parseExcelFile(
       data: {
         name: rawName,
         email: normEmail,
-        phone: rawPhone,
+        phone: normPhone || rawPhone,
         company: rawCompany,
         tags: parsedTags,
       },

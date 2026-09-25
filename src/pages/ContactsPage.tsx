@@ -17,6 +17,7 @@ import {
   Phone,
   Building,
   Tag,
+  MessageSquare,
 } from 'lucide-react';
 import { Contact, ContactStatus } from '../types';
 import {
@@ -26,7 +27,7 @@ import {
   deleteContact,
   bulkDeleteContacts,
 } from '../services/contactService';
-import { exportContactsToExcel } from '../utils/excelParser';
+import { exportContactsToExcel, normalizePhone } from '../utils/excelParser';
 import { useToast } from '../contexts/ToastContext';
 import { ActivePage } from '../components/layout/AppLayout';
 
@@ -40,6 +41,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ onNavigate }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
   const [selectedTag, setSelectedTag] = useState<string>('all');
+  const [filterIndianOnly, setFilterIndianOnly] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   // Modals state
@@ -89,9 +91,18 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ onNavigate }) => {
       const matchesTag =
         selectedTag === 'all' || c.tags.includes(selectedTag);
 
-      return matchesSearch && matchesStatus && matchesTag;
+      const p = (c.phone || '').trim();
+      const matchesIndian =
+        !filterIndianOnly ||
+        (p &&
+          (p.startsWith('+91') ||
+            p.startsWith('91') ||
+            p.startsWith('=91') ||
+            p.replace(/[^0-9]/g, '').length === 10));
+
+      return matchesSearch && matchesStatus && matchesTag && matchesIndian;
     });
-  }, [contacts, searchQuery, selectedStatus, selectedTag]);
+  }, [contacts, searchQuery, selectedStatus, selectedTag, filterIndianOnly]);
 
   // Bulk Selection Handlers
   const handleSelectAll = () => {
@@ -170,11 +181,14 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ onNavigate }) => {
         .map((t) => t.trim())
         .filter(Boolean);
 
+      const cleanPhoneInput = formData.phone.trim();
+      const normalizedPhone = normalizePhone(cleanPhoneInput) || cleanPhoneInput;
+
       if (editingContact) {
         await updateContact(editingContact.id, {
           name: formData.name.trim(),
           email: formData.email.trim().toLowerCase(),
-          phone: formData.phone.trim(),
+          phone: normalizedPhone,
           company: formData.company.trim(),
           tags: tagsArray,
           status: formData.status,
@@ -185,7 +199,7 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ onNavigate }) => {
         await addContact({
           name: formData.name.trim(),
           email: formData.email.trim().toLowerCase(),
-          phone: formData.phone.trim(),
+          phone: normalizedPhone,
           company: formData.company.trim(),
           tags: tagsArray,
           status: formData.status,
@@ -231,6 +245,13 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ onNavigate }) => {
         </div>
 
         <div className="flex items-center gap-2.5">
+          <button
+            onClick={() => onNavigate('google-sheets')}
+            className="flex items-center gap-2 px-3.5 py-2 text-xs font-medium bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 rounded-xl border border-emerald-500/30 transition-colors"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
+            Google Sheets
+          </button>
           <button
             onClick={() => exportContactsToExcel(filteredContacts)}
             className="flex items-center gap-2 px-3.5 py-2 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl border border-slate-700 transition-colors"
@@ -296,6 +317,20 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ onNavigate }) => {
               </option>
             ))}
           </select>
+
+          {/* Indian Numbers Quick Filter Toggle */}
+          <button
+            type="button"
+            onClick={() => setFilterIndianOnly(!filterIndianOnly)}
+            className={`px-3 py-2 rounded-xl text-xs font-semibold border flex items-center gap-1.5 transition-colors whitespace-nowrap ${
+              filterIndianOnly
+                ? 'bg-amber-500/20 text-amber-300 border-amber-500/50'
+                : 'bg-slate-800/80 text-slate-300 border-slate-700/80 hover:text-white'
+            }`}
+            title="Filter contacts with Indian mobile numbers (+91, =91, 10-digits)"
+          >
+            <span>🇮🇳 Indian (+91)</span>
+          </button>
         </div>
       </div>
 
@@ -401,9 +436,14 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ onNavigate }) => {
                           <Mail className="w-3 h-3 text-slate-400 shrink-0" />
                           <span className="truncate">{contact.email}</span>
                         </div>
-                        <div className="flex items-center gap-1 text-slate-400 text-[11px] mt-0.5">
+                        <div className="flex items-center gap-1.5 text-slate-400 text-[11px] mt-0.5">
                           <Phone className="w-3 h-3 text-slate-400 shrink-0" />
-                          <span>{contact.phone || 'No phone'}</span>
+                          {contact.phone?.startsWith('+91') && (
+                            <span className="px-1 py-0.2 rounded text-[9px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                              🇮🇳 +91
+                            </span>
+                          )}
+                          <span className="font-mono">{contact.phone || 'No phone'}</span>
                         </div>
                       </td>
                       <td className="p-4">
@@ -525,17 +565,23 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ onNavigate }) => {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                    Phone / WhatsApp *
-                  </label>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-semibold text-slate-300">
+                      Phone / WhatsApp *
+                    </label>
+                    <span className="text-[10px] text-amber-400 font-medium">🇮🇳 +91, =91, 91 accepted</span>
+                  </div>
                   <input
                     type="text"
                     required
-                    placeholder="+14155552671"
+                    placeholder="+91 98765 43210 or =919876543210"
                     value={formData.phone}
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    className="w-full px-3.5 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-indigo-500"
+                    className="w-full px-3.5 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-indigo-500 font-mono"
                   />
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    Accepts Indian numbers (+91, =91, 91), US (+1), and international E.164 formats.
+                  </p>
                 </div>
               </div>
 

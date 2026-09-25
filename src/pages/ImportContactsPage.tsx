@@ -145,6 +145,13 @@ export const ImportContactsPage: React.FC<ImportContactsPageProps> = ({ onNaviga
 
         <div className="flex items-center gap-2.5">
           <button
+            onClick={() => onNavigate('google-sheets')}
+            className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 rounded-xl border border-emerald-500/40 transition-colors shadow-sm"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
+            Import from Google Sheets
+          </button>
+          <button
             onClick={() => downloadSampleExcelTemplate()}
             className="flex items-center gap-2 px-3.5 py-2 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl border border-slate-700 transition-colors shadow-sm"
           >

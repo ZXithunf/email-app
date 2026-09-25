@@ -22,6 +22,7 @@ export type ActivePage =
   | 'dashboard'
   | 'contacts'
   | 'import-contacts'
+  | 'google-sheets'
   | 'campaigns'
   | 'create-campaign'
   | 'campaign-details'
@@ -52,6 +53,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
     { id: 'contacts', label: 'Contacts', icon: <Users className="w-5 h-5" /> },
     { id: 'import-contacts', label: 'Import Contacts', icon: <FileSpreadsheet className="w-5 h-5" /> },
+    { id: 'google-sheets', label: 'Google Sheets', icon: <FileSpreadsheet className="w-5 h-5 text-emerald-400" />, badge: 'Sync' },
     { id: 'campaigns', label: 'Campaigns', icon: <Megaphone className="w-5 h-5" /> },
     { id: 'create-campaign', label: 'Create Campaign', icon: <PlusCircle className="w-5 h-5" /> },
     { id: 'templates', label: 'Templates', icon: <FileText className="w-5 h-5" /> },
@@ -65,10 +67,10 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
       <header className="md:hidden flex items-center justify-between p-4 bg-slate-900 border-b border-slate-800 sticky top-0 z-30">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center font-bold text-white shadow-md shadow-indigo-500/20">
-            CA
+            A
           </div>
           <div>
-            <h1 className="text-base font-bold tracking-tight text-white">Contact Automation</h1>
+            <h1 className="text-base font-bold tracking-tight text-white">Astrix Automation</h1>
           </div>
         </div>
         <button
@@ -93,10 +95,10 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
             </div>
             <div>
               <span className="font-bold text-white text-base tracking-tight block">
-                AutoContact
+                Astrix
               </span>
               <span className="text-[11px] font-medium tracking-wide uppercase text-indigo-400">
-                Monthly Automation
+                Automated Messaging
               </span>
             </div>
           </div>

@@ -11,50 +11,123 @@ import {
   where,
   onSnapshot,
 } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from './firebase';
+import { db, handleFirestoreError, OperationType, removeUndefinedFields } from './firebase';
 import { Campaign, CampaignRecipient, Contact } from '../types';
+import { normalizeTimezone } from '../utils/timezoneUtils';
 
 const CAMPAIGNS_COLLECTION = 'campaigns';
 const RECIPIENTS_COLLECTION = 'campaignRecipients';
 
 /**
- * Calculates the next send timestamp based on dayOfMonth (1-31) and sendTime (HH:mm)
+ * Calculates the next send timestamp based on dayOfMonth (1-31), sendTime (HH:mm), and optional timezone
  */
 export function calculateNextSendAt(
   dayOfMonth: number,
   sendTime = '09:00',
-  fromDate: Date = new Date()
+  fromDate: Date = new Date(),
+  timezone?: string
 ): string {
   const [hours, minutes] = sendTime.split(':').map((n) => parseInt(n, 10) || 0);
 
-  const year = fromDate.getFullYear();
-  const month = fromDate.getMonth(); // 0-indexed
+  // If no timezone specified, use local date calculations (backward compatible with tests)
+  if (!timezone) {
+    const year = fromDate.getFullYear();
+    const month = fromDate.getMonth(); // 0-indexed
 
-  // Helper to get max days in a specific month
+    // Helper to get max days in a specific month
+    const getDaysInMonth = (y: number, m: number) => new Date(y, m + 1, 0).getDate();
+
+    // Try current month first
+    const currentMonthMaxDays = getDaysInMonth(year, month);
+    const targetDayCurrent = Math.min(dayOfMonth, currentMonthMaxDays);
+    const targetDateCurrent = new Date(year, month, targetDayCurrent, hours, minutes, 0, 0);
+
+    if (targetDateCurrent.getTime() > fromDate.getTime()) {
+      return targetDateCurrent.toISOString();
+    }
+
+    // Next month
+    let nextMonth = month + 1;
+    let nextYear = year;
+    if (nextMonth > 11) {
+      nextMonth = 0;
+      nextYear++;
+    }
+
+    const nextMonthMaxDays = getDaysInMonth(nextYear, nextMonth);
+    const targetDayNext = Math.min(dayOfMonth, nextMonthMaxDays);
+    const targetDateNext = new Date(nextYear, nextMonth, targetDayNext, hours, minutes, 0, 0);
+
+    return targetDateNext.toISOString();
+  }
+
+  // Timezone-aware calculation (e.g. Asia/Kolkata for IST)
+  const safeTz = normalizeTimezone(timezone);
+
+  let formatter: Intl.DateTimeFormat;
+  try {
+    formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: safeTz,
+      year: 'numeric',
+      month: 'numeric',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: 'numeric',
+      second: 'numeric',
+      hour12: false,
+    });
+  } catch {
+    formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'UTC',
+      year: 'numeric',
+      month: 'numeric',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: 'numeric',
+      second: 'numeric',
+      hour12: false,
+    });
+  }
+
+  const parts = Object.fromEntries(formatter.formatToParts(fromDate).map((p) => [p.type, p.value]));
+  const currentYear = parseInt(parts.year, 10);
+  const currentMonth = parseInt(parts.month, 10) - 1; // 0-indexed
+
   const getDaysInMonth = (y: number, m: number) => new Date(y, m + 1, 0).getDate();
 
-  // Try current month first
-  const currentMonthMaxDays = getDaysInMonth(year, month);
-  const targetDayCurrent = Math.min(dayOfMonth, currentMonthMaxDays);
-  const targetDateCurrent = new Date(year, month, targetDayCurrent, hours, minutes, 0, 0);
+  function toUtcDate(y: number, m: number, d: number, h: number, min: number): Date {
+    const guess = new Date(Date.UTC(y, m, d, h, min, 0, 0));
+    const p = Object.fromEntries(formatter.formatToParts(guess).map((x) => [x.type, x.value]));
+    const fYear = parseInt(p.year, 10);
+    const fMonth = parseInt(p.month, 10) - 1;
+    const fDay = parseInt(p.day, 10);
+    const fHour = parseInt(p.hour === '24' ? '0' : p.hour, 10);
+    const fMin = parseInt(p.minute, 10);
+    const offsetDiff = Date.UTC(fYear, fMonth, fDay, fHour, fMin, 0, 0) - guess.getTime();
+    return new Date(guess.getTime() - offsetDiff);
+  }
 
-  if (targetDateCurrent.getTime() > fromDate.getTime()) {
-    return targetDateCurrent.toISOString();
+  // Current month
+  const maxDayThisMonth = getDaysInMonth(currentYear, currentMonth);
+  const targetDayCurrent = Math.min(dayOfMonth, maxDayThisMonth);
+  const currentMonthDate = toUtcDate(currentYear, currentMonth, targetDayCurrent, hours, minutes);
+
+  if (currentMonthDate.getTime() > fromDate.getTime()) {
+    return currentMonthDate.toISOString();
   }
 
   // Next month
-  let nextMonth = month + 1;
-  let nextYear = year;
+  let nextYear = currentYear;
+  let nextMonth = currentMonth + 1;
   if (nextMonth > 11) {
     nextMonth = 0;
     nextYear++;
   }
 
-  const nextMonthMaxDays = getDaysInMonth(nextYear, nextMonth);
-  const targetDayNext = Math.min(dayOfMonth, nextMonthMaxDays);
-  const targetDateNext = new Date(nextYear, nextMonth, targetDayNext, hours, minutes, 0, 0);
-
-  return targetDateNext.toISOString();
+  const maxDayNextMonth = getDaysInMonth(nextYear, nextMonth);
+  const targetDayNext = Math.min(dayOfMonth, maxDayNextMonth);
+  const nextMonthDate = toUtcDate(nextYear, nextMonth, targetDayNext, hours, minutes);
+  return nextMonthDate.toISOString();
 }
 
 /**
@@ -112,7 +185,7 @@ export async function createCampaign(
 ): Promise<Campaign> {
   const campaignId = doc(collection(db, CAMPAIGNS_COLLECTION)).id;
   const now = new Date().toISOString();
-  const nextSendAt = calculateNextSendAt(data.dayOfMonth, data.sendTime);
+  const nextSendAt = calculateNextSendAt(data.dayOfMonth, data.sendTime, undefined, data.timezone);
 
   const campaignDoc: Campaign = {
     ...data,
@@ -124,7 +197,7 @@ export async function createCampaign(
   };
 
   try {
-    await setDoc(doc(db, CAMPAIGNS_COLLECTION, campaignId), campaignDoc);
+    await setDoc(doc(db, CAMPAIGNS_COLLECTION, campaignId), removeUndefinedFields(campaignDoc));
 
     // Save recipients mapping
     for (const contact of selectedContacts) {
@@ -137,7 +210,7 @@ export async function createCampaign(
         contactPhone: contact.phone,
         addedAt: now,
       };
-      await setDoc(doc(db, RECIPIENTS_COLLECTION, recipientDocId), recipientDoc);
+      await setDoc(doc(db, RECIPIENTS_COLLECTION, recipientDocId), removeUndefinedFields(recipientDoc));
     }
 
     return campaignDoc;
@@ -157,10 +230,23 @@ export async function updateCampaign(
     updatedAt: now,
   };
 
-  if (data.dayOfMonth !== undefined || data.sendTime !== undefined) {
-    const day = data.dayOfMonth ?? 1;
-    const time = data.sendTime ?? '09:00';
-    updates.nextSendAt = calculateNextSendAt(day, time);
+  if (data.dayOfMonth !== undefined || data.sendTime !== undefined || data.timezone !== undefined) {
+    let day = data.dayOfMonth;
+    let time = data.sendTime;
+    let tz = data.timezone;
+    if (day === undefined || time === undefined || tz === undefined) {
+      try {
+        const existing = await getCampaignById(id);
+        if (existing) {
+          day = day ?? existing.dayOfMonth;
+          time = time ?? existing.sendTime;
+          tz = tz ?? existing.timezone;
+        }
+      } catch {
+        // Continue with defaults if fetch fails
+      }
+    }
+    updates.nextSendAt = calculateNextSendAt(day ?? 1, time ?? '09:00', undefined, tz);
   }
 
   if (selectedContacts !== undefined) {
@@ -168,7 +254,7 @@ export async function updateCampaign(
   }
 
   try {
-    await updateDoc(doc(db, CAMPAIGNS_COLLECTION, id), updates);
+    await updateDoc(doc(db, CAMPAIGNS_COLLECTION, id), removeUndefinedFields(updates));
 
     // If new contact list provided, update campaignRecipients
     if (selectedContacts) {

@@ -22,6 +22,7 @@ import { subscribeToCampaigns } from '../services/campaignService';
 import { subscribeToMessageLogs, executeCampaignDelivery } from '../services/schedulerService';
 import { useToast } from '../contexts/ToastContext';
 import { ActivePage } from '../components/layout/AppLayout';
+import { getTimezoneShortLabel, isIndianTimezone } from '../utils/timezoneUtils';
 
 interface DashboardPageProps {
   onNavigate: (page: ActivePage, campaignId?: string) => void;
@@ -113,6 +114,13 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
         </div>
 
         <div className="flex flex-wrap items-center gap-3 relative z-10">
+          <button
+            onClick={() => onNavigate('google-sheets')}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 rounded-xl border border-emerald-500/30 transition-all shadow-sm"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+            Google Sheets
+          </button>
           <button
             onClick={() => onNavigate('import-contacts')}
             className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl border border-slate-700 transition-all shadow-sm"
@@ -276,8 +284,15 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
                         Active
                       </span>
                     </div>
-                    <div className="flex items-center gap-3 mt-1.5 text-xs text-slate-400">
-                      <span>Day {camp.dayOfMonth} at {camp.sendTime} {camp.timezone || 'UTC'}</span>
+                    <div className="flex items-center gap-2 mt-1.5 text-xs text-slate-400 flex-wrap">
+                      <span>Day {camp.dayOfMonth} @ {camp.sendTime}</span>
+                      <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold border ${
+                        isIndianTimezone(camp.timezone)
+                          ? 'bg-amber-500/10 text-amber-300 border-amber-500/25'
+                          : 'bg-slate-800 text-slate-300 border-slate-700'
+                      }`}>
+                        {getTimezoneShortLabel(camp.timezone)}
+                      </span>
                       <span>•</span>
                       <span>{camp.recipientCount} contacts</span>
                       <span>•</span>

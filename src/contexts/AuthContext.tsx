@@ -12,12 +12,27 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from '../services/firebase';
 import { AdminUser } from '../types';
 
+export const WORKSPACE_SCOPES = [
+  'https://www.googleapis.com/auth/drive',
+  'https://www.googleapis.com/auth/drive.file',
+  'https://www.googleapis.com/auth/drive.readonly',
+  'https://www.googleapis.com/auth/spreadsheets',
+  'https://www.googleapis.com/auth/spreadsheets.readonly',
+];
+
+// Memory-only caching of the Google OAuth access token per security guidelines
+let cachedAccessToken: string | null = null;
+
+export const getCachedGoogleAccessToken = (): string | null => cachedAccessToken;
+
 interface AuthContextType {
   currentUser: User | null;
   adminProfile: AdminUser | null;
   loading: boolean;
+  googleAccessToken: string | null;
   signInWithGoogle: () => Promise<void>;
   signInDemoAdmin: () => Promise<void>;
+  requestGoogleWorkspaceAuth: () => Promise<string>;
   logout: () => Promise<void>;
 }
 
@@ -27,6 +42,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [adminProfile, setAdminProfile] = useState<AdminUser | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [googleAccessToken, setGoogleAccessToken] = useState<string | null>(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -62,6 +78,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       } else {
         setAdminProfile(null);
+        cachedAccessToken = null;
+        setGoogleAccessToken(null);
       }
       setLoading(false);
     });
@@ -73,13 +91,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setLoading(true);
     try {
       const provider = new GoogleAuthProvider();
+      WORKSPACE_SCOPES.forEach((scope) => provider.addScope(scope));
       provider.setCustomParameters({ prompt: 'select_account' });
-      await signInWithPopup(auth, provider);
+      const result = await signInWithPopup(auth, provider);
+      const credential = GoogleAuthProvider.credentialFromResult(result);
+      if (credential?.accessToken) {
+        cachedAccessToken = credential.accessToken;
+        setGoogleAccessToken(credential.accessToken);
+      }
     } catch (err: any) {
       console.error('Google Sign In Error:', err);
       throw err;
     } finally {
       setLoading(false);
+    }
+  };
+
+  const requestGoogleWorkspaceAuth = async (): Promise<string> => {
+    try {
+      const provider = new GoogleAuthProvider();
+      WORKSPACE_SCOPES.forEach((scope) => provider.addScope(scope));
+      provider.setCustomParameters({ prompt: 'select_account' });
+      const result = await signInWithPopup(auth, provider);
+      const credential = GoogleAuthProvider.credentialFromResult(result);
+      if (!credential?.accessToken) {
+        throw new Error('Google did not return an access token. Please grant requested permissions.');
+      }
+      cachedAccessToken = credential.accessToken;
+      setGoogleAccessToken(credential.accessToken);
+      return credential.accessToken;
+    } catch (err: any) {
+      console.error('Google Workspace Auth Error:', err);
+      throw err;
     }
   };
 
@@ -108,6 +151,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = async () => {
+    cachedAccessToken = null;
+    setGoogleAccessToken(null);
     await signOut(auth);
   };
 
@@ -117,8 +162,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         currentUser,
         adminProfile,
         loading,
+        googleAccessToken,
         signInWithGoogle,
         signInDemoAdmin,
+        requestGoogleWorkspaceAuth,
         logout,
       }}
     >

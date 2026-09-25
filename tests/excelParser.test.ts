@@ -16,6 +16,15 @@ describe('Excel Parser & Validation Unit Tests', () => {
     expect(normalizePhone('(555) 123-4567')).toBe('+15551234567');
     expect(normalizePhone('+44 20 7946 0958')).toBe('+442079460958');
     expect(normalizePhone('5551234567')).toBe('+15551234567');
+
+    // Indian phone numbers
+    expect(normalizePhone('+919876543210')).toBe('+919876543210');
+    expect(normalizePhone('+91 98765 43210')).toBe('+919876543210');
+    expect(normalizePhone('919876543210')).toBe('+919876543210');
+    expect(normalizePhone('=919876543210')).toBe('+919876543210');
+    expect(normalizePhone('="919876543210"')).toBe('+919876543210');
+    expect(normalizePhone('=+919876543210')).toBe('+919876543210');
+    expect(normalizePhone('09876543210')).toBe('+919876543210');
   });
 
   it('parses valid and invalid Excel rows with duplicate detection', async () => {

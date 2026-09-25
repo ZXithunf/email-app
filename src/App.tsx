@@ -12,6 +12,7 @@ import { CampaignDetailsPage } from './pages/CampaignDetailsPage';
 import { TemplatesPage } from './pages/TemplatesPage';
 import { MessageLogsPage } from './pages/MessageLogsPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { GoogleSheetsPage } from './pages/GoogleSheetsPage';
 import { Zap } from 'lucide-react';
 
 const MainContent: React.FC = () => {
@@ -48,6 +49,7 @@ const MainContent: React.FC = () => {
       {activePage === 'dashboard' && <DashboardPage onNavigate={handleNavigate} />}
       {activePage === 'contacts' && <ContactsPage onNavigate={handleNavigate} />}
       {activePage === 'import-contacts' && <ImportContactsPage onNavigate={handleNavigate} />}
+      {activePage === 'google-sheets' && <GoogleSheetsPage onNavigate={handleNavigate} />}
       {activePage === 'campaigns' && <CampaignsPage onNavigate={handleNavigate} />}
       {activePage === 'create-campaign' && <CreateCampaignPage onNavigate={handleNavigate} />}
       {activePage === 'campaign-details' && (

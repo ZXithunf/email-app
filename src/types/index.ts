@@ -49,7 +49,7 @@ export interface Campaign {
   smsImageUrl?: string;
   channels: ChannelType[];
   recipientFilter?: {
-    type: 'all' | 'tags' | 'company' | 'manual';
+    type: 'all' | 'india' | 'tags' | 'company' | 'manual';
     tags?: string[];
     company?: string;
     contactIds?: string[];
@@ -89,6 +89,8 @@ export interface MessageLog {
   channel: ChannelType;
   provider: 'amazon_ses' | 'twilio' | 'simulator';
   providerMessageId?: string;
+  companySender?: string; // e.g. "Astrix"
+  directActionUrl?: string; // One-click dispatch link (WhatsApp Web / mailto)
   monthCycle: string; // e.g. "2026-09"
   status: MessageLogStatus;
   error?: string;
@@ -110,6 +112,8 @@ export interface MessageTemplate {
 
 export interface PlatformSettings {
   id?: string;
+  companyName: string;
+  sesSenderName: string;
   sesRegion: string;
   sesFromEmail: string;
   sesAccessKeyId?: string;
@@ -118,9 +122,21 @@ export interface PlatformSettings {
   twilioWhatsAppNumber: string;
   twilioAccountSid?: string;
   twilioAuthTokenConfigured?: boolean;
+  // WhatsApp Provider Configuration (Meta Cloud API / Twilio / Direct)
+  whatsappProvider?: 'twilio' | 'meta_cloud' | 'direct_wa_me';
+  metaWhatsAppPhoneNumberId?: string;
+  metaWhatsAppBusinessAccountId?: string;
+  metaWhatsAppAccessTokenConfigured?: boolean;
+  // Gmail API & SMTP Configuration (Google Cloud / App Password)
+  emailProvider?: 'amazon_ses' | 'gmail_api' | 'gmail_smtp' | 'direct_mailto';
+  gmailUserEmail?: string;
+  gmailAppPasswordConfigured?: boolean;
+  gmailClientId?: string;
   schedulerCron: string;
+  defaultTimezone?: string;
   rateLimitPerMinute: number;
   simulationMode: boolean;
+  indianNumberRouting?: 'standard' | 'priority' | 'whatsapp_direct';
   updatedAt: string;
 }
 
