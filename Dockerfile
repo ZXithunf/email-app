@@ -8,7 +8,7 @@ WORKDIR /app
 COPY package.json package-lock.json* bun.lock* ./
 
 # Install clean production and build dependencies
-RUN npm ci
+RUN npm install
 
 # Copy entire source code
 COPY . .
