@@ -84,4 +84,150 @@ describe('Excel Parser & Validation Unit Tests', () => {
     expect(result.validCount).toBe(1);
     expect(result.invalidCount).toBe(3);
   });
+
+  it('correctly handles First Name and Last Name columns split across headers', async () => {
+    const data = [
+      {
+        'First Name': 'John',
+        'Last Name': 'Doe',
+        'Email Address': 'john.doe@enterprise.com',
+        'Mobile Number': '+14155551234',
+        'Company Name': 'Acme Global',
+      },
+    ];
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Clients');
+    const buffer = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+
+    const result = await parseExcelFile(buffer, []);
+    expect(result.records.length).toBe(1);
+    expect(result.validCount).toBe(1);
+    expect(result.records[0].data.name).toBe('John Doe');
+    expect(result.records[0].data.email).toBe('john.doe@enterprise.com');
+  });
+
+  it('allows valid email contacts even when phone is empty (email-only lists)', async () => {
+    const data = [
+      {
+        Name: 'Email Only Subscriber',
+        Email: 'subscriber@newsletter.org',
+        Phone: '',
+        Company: 'Media Corp',
+      },
+    ];
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Subscribers');
+    const buffer = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+
+    const result = await parseExcelFile(buffer, []);
+    expect(result.validCount).toBe(1);
+    expect(result.records[0].isValid).toBe(true);
+    expect(result.records[0].data.phone).toBe('');
+  });
+
+  it('handles phone numbers in scientific notation or float notation', () => {
+    expect(normalizePhone('9.87654E+11')).toBe('+987654000000');
+    expect(normalizePhone('9876543210.0')).toBe('+19876543210');
+  });
+
+  it('auto-detects varied column headers such as WhatsApp, Email ID, and Customer Name', async () => {
+    const data = [
+      {
+        'Customer Name': 'Rohan Mehta',
+        'Email ID': 'rohan.mehta@enterprise.in',
+        'WhatsApp Number': '+91 98123 45678',
+        'Firm Name': 'Mehta Logistics',
+        'Category': 'VIP, North Region',
+      },
+    ];
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Leads');
+    const buffer = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+
+    const result = await parseExcelFile(buffer, []);
+    expect(result.validCount).toBe(1);
+    expect(result.records[0].data.name).toBe('Rohan Mehta');
+    expect(result.records[0].data.email).toBe('rohan.mehta@enterprise.in');
+    expect(result.records[0].data.phone).toBe('+919812345678');
+    expect(result.records[0].data.company).toBe('Mehta Logistics');
+    expect(result.records[0].data.tags).toContain('VIP');
+  });
+
+  it('supports phone-only contacts for WhatsApp campaigns with auto-assigned placeholder email', async () => {
+    const data = [
+      {
+        'Name': 'Kavita Patel',
+        'Email': '', // Empty email
+        'Phone': '+919876543210',
+        'Company': 'Patel Silks',
+      },
+    ];
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'WhatsAppList');
+    const buffer = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+
+    const result = await parseExcelFile(buffer, [], { allowPhoneOnly: true });
+    expect(result.validCount).toBe(1);
+    expect(result.records[0].isValid).toBe(true);
+    expect(result.records[0].isPhoneOnly).toBe(true);
+    expect(result.records[0].data.email).toContain('@contact.local');
+    expect(result.records[0].data.phone).toBe('+919876543210');
+  });
+
+  it('derives human contact name from email when name column is blank', async () => {
+    const data = [
+      {
+        'Name': '',
+        'Email': 'rajesh.sharma@fintech.co',
+        'Phone': '+919988776655',
+      },
+    ];
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+    const buffer = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+
+    const result = await parseExcelFile(buffer, []);
+    expect(result.validCount).toBe(1);
+    expect(result.records[0].data.name).toBe('Rajesh Sharma');
+  });
+
+  it('honors interactive custom column mapping overrides', async () => {
+    const data = [
+      {
+        'Col1': 'Custom Title',
+        'Col2': 'Dr. Marcus Vance',
+        'Col3': 'dr.marcus@clinic.org',
+        'Col4': '+12125550199',
+      },
+    ];
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Custom');
+    const buffer = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+
+    // Manually map columns 1 -> Name, 2 -> Email, 3 -> Phone
+    const result = await parseExcelFile(buffer, [], {
+      columnMapping: {
+        nameCol: 1,
+        emailCol: 2,
+        phoneCol: 3,
+      },
+    });
+
+    expect(result.validCount).toBe(1);
+    expect(result.records[0].data.name).toBe('Dr. Marcus Vance');
+    expect(result.records[0].data.email).toBe('dr.marcus@clinic.org');
+    expect(result.records[0].data.phone).toBe('+12125550199');
+  });
 });

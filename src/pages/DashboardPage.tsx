@@ -23,6 +23,7 @@ import { subscribeToMessageLogs, executeCampaignDelivery } from '../services/sch
 import { useToast } from '../contexts/ToastContext';
 import { ActivePage } from '../components/layout/AppLayout';
 import { getTimezoneShortLabel, isIndianTimezone } from '../utils/timezoneUtils';
+import { CampaignPerformanceCard } from '../components/dashboard/CampaignPerformanceCard';
 
 interface DashboardPageProps {
   onNavigate: (page: ActivePage, campaignId?: string) => void;
@@ -38,7 +39,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
   useEffect(() => {
     const unsubContacts = subscribeToContacts(setContacts);
     const unsubCampaigns = subscribeToCampaigns(setCampaigns);
-    const unsubLogs = subscribeToMessageLogs(setLogs, 50);
+    const unsubLogs = subscribeToMessageLogs(setLogs, 150);
 
     return () => {
       unsubContacts();
@@ -235,6 +236,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
           <p className="mt-3 text-xs text-slate-400">Protected duplicates</p>
         </div>
       </div>
+
+      {/* 30-Day Campaign Performance & Engagement Analytics Card (Recharts) */}
+      <CampaignPerformanceCard logs={logs} />
 
       {/* Two Column Section: Upcoming Campaigns & Recent Activity */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">

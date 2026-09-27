@@ -35,6 +35,8 @@ export interface ValidatedImportRecord {
   };
   isValid: boolean;
   errors: string[];
+  warnings?: string[];
+  isPhoneOnly?: boolean;
   isDuplicateInFile?: boolean;
   isExistingInDb?: boolean;
 }

@@ -13,7 +13,7 @@ service cloud.firestore {
     function isValidContact(data) {
       return data.name is string && data.name.size() > 0 && data.name.size() <= 150 &&
              data.email is string && data.email.size() > 3 && data.email.size() <= 200 &&
-             data.phone is string && data.phone.size() <= 30 &&
+             (!('phone' in data) || (data.phone is string && data.phone.size() <= 30)) &&
              (data.status == 'subscribed' || data.status == 'unsubscribed' || data.status == 'bounced');
     }
 
