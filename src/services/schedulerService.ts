@@ -15,6 +15,7 @@ import { calculateNextSendAt, getMonthCycleKey, updateCampaign } from './campaig
 import { interpolateTemplate } from './templateService';
 import { normalizePhone } from '../utils/excelParser';
 import { fetchSettings } from './settingsService';
+import { sendGmailMessage } from './gmailService';
 
 const LOGS_COLLECTION = 'messageLogs';
 
@@ -117,6 +118,9 @@ export async function executeCampaignDelivery(
     targetMonthCycle?: string;
     forceResend?: boolean;
     companyName?: string;
+    useGmailApi?: boolean;
+    gmailAccessToken?: string;
+    senderEmail?: string;
     onProgress?: (progress: { current: number; total: number; latestLog: MessageLog }) => void;
   } = {}
 ): Promise<CampaignExecutionResult> {
@@ -279,7 +283,63 @@ export async function executeCampaignDelivery(
         directActionUrl = `sms:${destination}?body=${encodeURIComponent(renderedBody)}`;
       }
 
-      // 4. Dispatch to Provider (simulated or real gateway)
+      // 4. Real Gmail API Dispatch (if Gmail is enabled and access token is present)
+      if (channel === 'email' && options.useGmailApi && options.gmailAccessToken) {
+        try {
+          const gmailResult = await sendGmailMessage({
+            accessToken: options.gmailAccessToken,
+            to: destination,
+            subject: renderedSubject,
+            htmlBody: renderedBody,
+            fromName: companyName,
+            replyTo: options.senderEmail,
+          });
+
+          const log = await createMessageLog({
+            campaignId: campaign.id,
+            campaignName: campaign.name,
+            contactId: contact.id,
+            contactName: contact.name,
+            destination,
+            channel: 'email',
+            provider: 'gmail_api',
+            providerMessageId: gmailResult.id,
+            companySender: companyName,
+            directActionUrl: 'https://mail.google.com/mail/u/0/#sent',
+            monthCycle,
+            status: 'sent',
+            scheduledAt: now.toISOString(),
+            sentAt: new Date().toISOString(),
+          });
+          executionLogs.push(log);
+          sentCount++;
+          options.onProgress?.({ current: progressStep, total: totalChannelsCount, latestLog: log });
+          continue;
+        } catch (err: any) {
+          const log = await createMessageLog({
+            campaignId: campaign.id,
+            campaignName: campaign.name,
+            contactId: contact.id,
+            contactName: contact.name,
+            destination,
+            channel: 'email',
+            provider: 'gmail_api',
+            companySender: companyName,
+            directActionUrl: 'https://mail.google.com/mail/u/0/#sent',
+            monthCycle,
+            status: 'failed',
+            error: err?.message || 'Gmail API delivery error',
+            scheduledAt: now.toISOString(),
+            sentAt: undefined,
+          });
+          executionLogs.push(log);
+          failedCount++;
+          options.onProgress?.({ current: progressStep, total: totalChannelsCount, latestLog: log });
+          continue;
+        }
+      }
+
+      // 5. Dispatch to Provider (simulated or real gateway)
       try {
         const isIndianNumber = destination.startsWith('+91');
         const providerMessageId =

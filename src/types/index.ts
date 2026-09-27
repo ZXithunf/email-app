@@ -87,10 +87,10 @@ export interface MessageLog {
   contactName: string;
   destination: string;
   channel: ChannelType;
-  provider: 'amazon_ses' | 'twilio' | 'simulator';
+  provider: 'amazon_ses' | 'twilio' | 'simulator' | 'gmail_api';
   providerMessageId?: string;
   companySender?: string; // e.g. "Astrix"
-  directActionUrl?: string; // One-click dispatch link (WhatsApp Web / mailto)
+  directActionUrl?: string; // One-click dispatch link (WhatsApp Web / mailto / Gmail)
   monthCycle: string; // e.g. "2026-09"
   status: MessageLogStatus;
   error?: string;

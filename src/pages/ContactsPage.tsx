@@ -18,6 +18,8 @@ import {
   Building,
   Tag,
   MessageSquare,
+  Send,
+  RefreshCw,
 } from 'lucide-react';
 import { Contact, ContactStatus } from '../types';
 import {
@@ -30,6 +32,9 @@ import {
 import { exportContactsToExcel, normalizePhone } from '../utils/excelParser';
 import { useToast } from '../contexts/ToastContext';
 import { ActivePage } from '../components/layout/AppLayout';
+import { useAuth } from '../contexts/AuthContext';
+import { sendGmailMessage } from '../services/gmailService';
+import { GmailSendConfirmModal } from '../components/common/GmailSendConfirmModal';
 
 interface ContactsPageProps {
   onNavigate: (page: ActivePage) => void;
@@ -49,6 +54,16 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ onNavigate }) => {
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [contactToDelete, setContactToDelete] = useState<Contact | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Quick Gmail Dispatch State
+  const { currentUser, googleAccessToken, requestGoogleWorkspaceAuth } = useAuth();
+  const [gmailContact, setGmailContact] = useState<Contact | null>(null);
+  const [quickSubject, setQuickSubject] = useState('');
+  const [quickBody, setQuickBody] = useState('');
+  const [showQuickGmailModal, setShowQuickGmailModal] = useState(false);
+  const [showGmailConfirm, setShowGmailConfirm] = useState(false);
+  const [isSendingQuickGmail, setIsSendingQuickGmail] = useState(false);
+  const [isAuthorizingGoogle, setIsAuthorizingGoogle] = useState(false);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -230,6 +245,77 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ onNavigate }) => {
       }
     } catch (err: any) {
       toastError('Delete Failed', err?.message);
+    }
+  };
+
+  const handleOpenQuickGmail = (contact: Contact) => {
+    setGmailContact(contact);
+    setQuickSubject(`Astrix Update for ${contact.name}`);
+    setQuickBody(
+      `Hello ${contact.name},\n\nWe wanted to share an update regarding your services with Astrix.\n\nPlease let us know if you have any questions.\n\nBest regards,\nAstrix Automation Team`
+    );
+    setShowQuickGmailModal(true);
+  };
+
+  const handleInitiateQuickSend = async () => {
+    if (!gmailContact) return;
+    if (!quickSubject.trim() || !quickBody.trim()) {
+      toastError('Missing Fields', 'Please enter both an email subject and body.');
+      return;
+    }
+
+    let token = googleAccessToken;
+    if (!token) {
+      setIsAuthorizingGoogle(true);
+      try {
+        token = await requestGoogleWorkspaceAuth();
+      } catch (err: any) {
+        toastError('Google Sign-In Required', 'Please connect your Google Account to authorize sending via Gmail.');
+        setIsAuthorizingGoogle(false);
+        return;
+      } finally {
+        setIsAuthorizingGoogle(false);
+      }
+    }
+
+    setShowGmailConfirm(true);
+  };
+
+  const handleConfirmQuickSend = async () => {
+    if (!gmailContact) return;
+    setIsSendingQuickGmail(true);
+    setShowGmailConfirm(false);
+
+    try {
+      const htmlFormatted = quickBody
+        .split('\n\n')
+        .map((paragraph) => `<p style="margin-bottom: 12px; line-height: 1.6;">${paragraph.replace(/\n/g, '<br/>')}</p>`)
+        .join('');
+
+      const res = await sendGmailMessage({
+        accessToken: googleAccessToken!,
+        to: gmailContact.email.trim(),
+        subject: quickSubject.trim(),
+        htmlBody: `
+          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; color: #1e293b; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px;">
+            ${htmlFormatted}
+            <hr style="border: 0; border-top: 1px solid #f1f5f9; margin: 24px 0;" />
+            <p style="font-size: 11px; color: #94a3b8; text-align: center;">
+              Sent via Astrix Contact Automation &bull; Authenticated Google Workspace Sender
+            </p>
+          </div>
+        `,
+        fromName: 'Astrix Automation',
+        replyTo: currentUser?.email || undefined,
+      });
+
+      success('Gmail Delivered', `Email successfully sent to ${gmailContact.email} (Gmail ID: ${res.id})`);
+      setShowQuickGmailModal(false);
+      setGmailContact(null);
+    } catch (err: any) {
+      toastError('Send Failed', err?.message);
+    } finally {
+      setIsSendingQuickGmail(false);
     }
   };
 
@@ -485,6 +571,13 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ onNavigate }) => {
                       <td className="p-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
                           <button
+                            onClick={() => handleOpenQuickGmail(contact)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-slate-800 transition-colors"
+                            title="Send Email via Gmail API"
+                          >
+                            <Mail className="w-3.5 h-3.5 text-red-400" />
+                          </button>
+                          <button
                             onClick={() => handleOpenEdit(contact)}
                             className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
                             title="Edit Contact"
@@ -692,6 +785,103 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ onNavigate }) => {
           </div>
         </div>
       )}
+      {/* Quick Gmail Compose Modal */}
+      {showQuickGmailModal && gmailContact && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-red-500/10 text-red-400 flex items-center justify-center">
+                  <Mail className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">Send Email via Gmail API</h3>
+                  <p className="text-[11px] text-slate-400">
+                    Dispatched from your Google account ({currentUser?.email || 'Gmail'})
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowQuickGmailModal(false)}
+                className="text-slate-400 hover:text-white text-xs px-2 py-1 rounded-lg hover:bg-slate-800"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">To</label>
+                <div className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800 text-xs text-white font-medium flex justify-between">
+                  <span>{gmailContact.name}</span>
+                  <span className="font-mono text-slate-400">{gmailContact.email}</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Subject *</label>
+                <input
+                  type="text"
+                  required
+                  value={quickSubject}
+                  onChange={(e) => setQuickSubject(e.target.value)}
+                  placeholder="Subject..."
+                  className="w-full px-3.5 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-red-500 font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Message Body *</label>
+                <textarea
+                  rows={6}
+                  required
+                  value={quickBody}
+                  onChange={(e) => setQuickBody(e.target.value)}
+                  placeholder="Type your message here..."
+                  className="w-full px-3.5 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-red-500 leading-relaxed font-sans"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-2 border-t border-slate-800">
+              <span className="text-[10px] text-slate-400">
+                Uses official Google REST API
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowQuickGmailModal(false)}
+                  className="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleInitiateQuickSend}
+                  disabled={isAuthorizingGoogle || isSendingQuickGmail}
+                  className="flex items-center gap-2 px-5 py-2 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white rounded-xl text-xs font-semibold shadow-lg shadow-red-500/25 transition-all disabled:opacity-50 cursor-pointer"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>Review & Dispatch</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Explicit Gmail Confirmation Modal */}
+      <GmailSendConfirmModal
+        isOpen={showGmailConfirm}
+        senderEmail={currentUser?.email || 'Connected Google Account'}
+        recipientsCount={1}
+        recipientSamples={gmailContact ? [{ name: gmailContact.name, email: gmailContact.email }] : []}
+        subject={quickSubject}
+        isBulk={false}
+        isLoading={isSendingQuickGmail}
+        onConfirm={handleConfirmQuickSend}
+        onCancel={() => setShowGmailConfirm(false)}
+      />
     </div>
   );
 };

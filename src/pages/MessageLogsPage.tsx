@@ -301,7 +301,18 @@ export const MessageLogsPage: React.FC = () => {
               )}
             </div>
 
-            <div className="mt-5 flex justify-end">
+            <div className="mt-5 flex items-center justify-between">
+              {inspectingLog.provider === 'gmail_api' ? (
+                <a
+                  href="https://mail.google.com/mail/u/0/#sent"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-600/20 text-red-300 border border-red-500/30 rounded-xl hover:bg-red-600/30 text-xs font-semibold transition-colors"
+                >
+                  <Mail className="w-3.5 h-3.5 text-red-400" />
+                  <span>View in Gmail Sent</span>
+                </a>
+              ) : <div />}
               <button
                 onClick={() => setInspectingLog(null)}
                 className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold"

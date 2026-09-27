@@ -18,6 +18,7 @@ export const WORKSPACE_SCOPES = [
   'https://www.googleapis.com/auth/drive.readonly',
   'https://www.googleapis.com/auth/spreadsheets',
   'https://www.googleapis.com/auth/spreadsheets.readonly',
+  'https://www.googleapis.com/auth/gmail.send',
 ];
 
 // Memory-only caching of the Google OAuth access token per security guidelines

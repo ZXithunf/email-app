@@ -36,6 +36,9 @@ import {
   isIndianTimezone,
   getCurrentTimeInZone,
 } from '../utils/timezoneUtils';
+import { useAuth } from '../contexts/AuthContext';
+import { sendGmailMessage } from '../services/gmailService';
+import { GmailSendConfirmModal } from '../components/common/GmailSendConfirmModal';
 
 interface CampaignDetailsPageProps {
   campaignId: string;
@@ -63,7 +66,14 @@ export const CampaignDetailsPage: React.FC<CampaignDetailsPageProps> = ({
   const [testEmail, setTestEmail] = useState('bmmithun688@gmail.com');
   const [testPhone, setTestPhone] = useState('+91');
   const [testChannel, setTestChannel] = useState<'whatsapp' | 'email' | 'sms'>('whatsapp');
+  const [testSendViaGmail, setTestSendViaGmail] = useState(true);
   const [isSendingTest, setIsSendingTest] = useState(false);
+
+  // Gmail API Auth & Explicit Confirmation Modal State
+  const { currentUser, googleAccessToken, requestGoogleWorkspaceAuth } = useAuth();
+  const [showGmailConfirmModal, setShowGmailConfirmModal] = useState(false);
+  const [gmailConfirmMode, setGmailConfirmMode] = useState<'campaign' | 'test'>('campaign');
+  const [isConnectingGoogle, setIsConnectingGoogle] = useState(false);
 
   // Schedule & Timezone editing
   const [isEditingSchedule, setIsEditingSchedule] = useState(false);
@@ -194,7 +204,123 @@ export const CampaignDetailsPage: React.FC<CampaignDetailsPageProps> = ({
     }
   };
 
+  /**
+   * Prompts user with mandatory confirmation before sending real emails via Gmail API
+   */
+  const handleInitiateGmailRun = async () => {
+    let token = googleAccessToken;
+    if (!token) {
+      setIsConnectingGoogle(true);
+      try {
+        token = await requestGoogleWorkspaceAuth();
+      } catch (err: any) {
+        toastError('Google Sign-In Required', 'Please connect your Google Account to authorize sending via Gmail.');
+        setIsConnectingGoogle(false);
+        return;
+      } finally {
+        setIsConnectingGoogle(false);
+      }
+    }
+
+    setGmailConfirmMode('campaign');
+    setShowGmailConfirmModal(true);
+  };
+
+  /**
+   * Confirms and dispatches campaign emails via Gmail API
+   */
+  const handleConfirmGmailDispatch = async () => {
+    if (gmailConfirmMode === 'campaign') {
+      setIsExecuting(true);
+      setShowGmailConfirmModal(false);
+      try {
+        const res = await executeCampaignDelivery(campaign, targetRecipients, {
+          forceResend,
+          companyName: 'Astrix',
+          useGmailApi: true,
+          gmailAccessToken: googleAccessToken || undefined,
+          senderEmail: currentUser?.email || undefined,
+        });
+        setLastExecution(res);
+        success(
+          'Dispatched via Gmail API',
+          `Successfully dispatched ${res.sentCount} emails directly through your Google Workspace account! Check your Gmail Sent folder.`
+        );
+        const updatedLogs = await fetchMessageLogs(200);
+        setLogs(updatedLogs.filter((l) => l.campaignId === campaign.id));
+      } catch (err: any) {
+        toastError('Gmail Dispatch Error', err?.message);
+      } finally {
+        setIsExecuting(false);
+      }
+    } else {
+      // Test mode execution
+      setIsSendingTest(true);
+      setShowGmailConfirmModal(false);
+      try {
+        const testContact: Contact = {
+          id: `test-${Date.now()}`,
+          name: 'Astrix Test User',
+          email: testEmail.trim(),
+          phone: testPhone.trim(),
+          company: 'Astrix',
+          tags: ['Test'],
+          status: 'subscribed',
+          consentGiven: true,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+
+        const testSubj = interpolateTemplate(campaign.emailSubject, testContact);
+        const testBody = interpolateTemplate(campaign.emailBody, testContact);
+
+        const result = await sendGmailMessage({
+          accessToken: googleAccessToken!,
+          to: testEmail.trim(),
+          subject: testSubj.toLowerCase().includes('astrix') ? testSubj : `Astrix: ${testSubj}`,
+          htmlBody: testBody,
+          fromName: 'Astrix Marketing',
+          replyTo: currentUser?.email || undefined,
+        });
+
+        success(
+          'Gmail Test Sent',
+          `Live test email dispatched to ${testEmail.trim()} (Gmail Message ID: ${result.id}). Check your inbox!`
+        );
+        setShowTestModal(false);
+
+        // Record log
+        const updatedLogs = await fetchMessageLogs(200);
+        setLogs(updatedLogs.filter((l) => l.campaignId === campaign.id));
+      } catch (err: any) {
+        toastError('Gmail Test Failed', err?.message);
+      } finally {
+        setIsSendingTest(false);
+      }
+    }
+  };
+
   const handleSendDirectTest = async () => {
+    if (testChannel === 'email' && testSendViaGmail) {
+      let token = googleAccessToken;
+      if (!token) {
+        setIsConnectingGoogle(true);
+        try {
+          token = await requestGoogleWorkspaceAuth();
+        } catch (err: any) {
+          toastError('Google Sign-In Required', 'Please connect your Google Account to authorize sending via Gmail.');
+          setIsConnectingGoogle(false);
+          return;
+        } finally {
+          setIsConnectingGoogle(false);
+        }
+      }
+
+      setGmailConfirmMode('test');
+      setShowGmailConfirmModal(true);
+      return;
+    }
+
     setIsSendingTest(true);
     try {
       const testContact: Contact = {
@@ -315,6 +441,17 @@ export const CampaignDetailsPage: React.FC<CampaignDetailsPageProps> = ({
           >
             {campaign.active ? 'Pause Campaign' : 'Activate Campaign'}
           </button>
+          {campaign.channels.includes('email') && (
+            <button
+              onClick={handleInitiateGmailRun}
+              disabled={isExecuting || isConnectingGoogle}
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white rounded-xl text-xs font-semibold shadow-lg shadow-red-500/25 transition-all disabled:opacity-50 cursor-pointer"
+              title="Send real emails directly from your Google Workspace Gmail account"
+            >
+              <Mail className="w-3.5 h-3.5" />
+              <span>{isConnectingGoogle ? 'Connecting Google...' : 'Dispatch via Gmail API'}</span>
+            </button>
+          )}
           <button
             onClick={handleRunNow}
             disabled={isExecuting}
@@ -752,19 +889,35 @@ export const CampaignDetailsPage: React.FC<CampaignDetailsPageProps> = ({
               </div>
 
               {testChannel === 'email' ? (
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Recipient Email Address *</label>
-                  <input
-                    type="email"
-                    required
-                    value={testEmail}
-                    onChange={(e) => setTestEmail(e.target.value)}
-                    placeholder="bmmithun688@gmail.com"
-                    className="w-full px-3.5 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-indigo-500 font-mono"
-                  />
-                  <p className="text-[10px] text-slate-400 mt-1">
-                    Will send from &quot;Astrix &lt;notifications@astrix.com&gt;&quot;
-                  </p>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">Recipient Email Address *</label>
+                    <input
+                      type="email"
+                      required
+                      value={testEmail}
+                      onChange={(e) => setTestEmail(e.target.value)}
+                      placeholder="bmmithun688@gmail.com"
+                      className="w-full px-3.5 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-indigo-500 font-mono"
+                    />
+                  </div>
+                  <label className="flex items-start gap-2.5 p-3 rounded-xl bg-slate-950/80 border border-red-500/30 cursor-pointer hover:border-red-500/50 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={testSendViaGmail}
+                      onChange={(e) => setTestSendViaGmail(e.target.checked)}
+                      className="mt-0.5 rounded bg-slate-800 border-slate-700 text-red-600 focus:ring-0"
+                    />
+                    <div>
+                      <span className="text-xs font-semibold text-white flex items-center gap-1.5">
+                        <Mail className="w-3.5 h-3.5 text-red-400" />
+                        Send Live via Google Workspace Gmail API
+                      </span>
+                      <p className="text-[10px] text-slate-400 mt-0.5">
+                        Dispatches a real email through your Google account ({currentUser?.email || 'Gmail'}) directly to this inbox.
+                      </p>
+                    </div>
+                  </label>
                 </div>
               ) : (
                 <div>
@@ -941,6 +1094,22 @@ export const CampaignDetailsPage: React.FC<CampaignDetailsPageProps> = ({
           </div>
         </div>
       )}
+      {/* Explicit Gmail API User Confirmation Modal (Google Workspace Integration requirement) */}
+      <GmailSendConfirmModal
+        isOpen={showGmailConfirmModal}
+        senderEmail={currentUser?.email || 'Connected Google Account'}
+        recipientsCount={gmailConfirmMode === 'campaign' ? targetRecipients.length : 1}
+        recipientSamples={
+          gmailConfirmMode === 'campaign'
+            ? targetRecipients.slice(0, 5).map((r) => ({ name: r.name, email: r.email }))
+            : [{ name: 'Astrix Test Recipient', email: testEmail }]
+        }
+        subject={renderedSubject}
+        isBulk={gmailConfirmMode === 'campaign' && targetRecipients.length > 1}
+        isLoading={isExecuting || isSendingTest}
+        onConfirm={handleConfirmGmailDispatch}
+        onCancel={() => setShowGmailConfirmModal(false)}
+      />
     </div>
   );
 };

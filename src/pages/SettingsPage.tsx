@@ -33,6 +33,9 @@ import {
   getCurrentTimeInZone,
   isIndianTimezone,
 } from '../utils/timezoneUtils';
+import { useAuth } from '../contexts/AuthContext';
+import { sendGmailMessage } from '../services/gmailService';
+import { GmailSendConfirmModal } from '../components/common/GmailSendConfirmModal';
 
 export interface SecurityCheckResult {
   id: string;
@@ -49,6 +52,13 @@ export const SettingsPage: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [isRunningCron, setIsRunningCron] = useState(false);
   const [cronReport, setCronReport] = useState<string | null>(null);
+
+  // Google Workspace & Gmail API state
+  const { currentUser, googleAccessToken, requestGoogleWorkspaceAuth } = useAuth();
+  const [gmailTestRecipient, setGmailTestRecipient] = useState('bmmithun688@gmail.com');
+  const [isSendingGmailTest, setIsSendingGmailTest] = useState(false);
+  const [showGmailTestConfirm, setShowGmailTestConfirm] = useState(false);
+  const [isAuthorizingGoogle, setIsAuthorizingGoogle] = useState(false);
 
   // Security Audit Runner state
   const [isRunningSecurityAudit, setIsRunningSecurityAudit] = useState(false);
@@ -80,6 +90,75 @@ export const SettingsPage: React.FC = () => {
       toastError('Save Failed', err?.message);
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleInitiateGmailTestSend = async () => {
+    let token = googleAccessToken;
+    if (!token) {
+      setIsAuthorizingGoogle(true);
+      try {
+        token = await requestGoogleWorkspaceAuth();
+      } catch (err: any) {
+        toastError('Google Sign-In Required', 'Please connect your Google Account to authorize sending via Gmail.');
+        setIsAuthorizingGoogle(false);
+        return;
+      } finally {
+        setIsAuthorizingGoogle(false);
+      }
+    }
+
+    if (!gmailTestRecipient || !gmailTestRecipient.includes('@')) {
+      toastError('Invalid Email', 'Please enter a valid recipient email address for testing.');
+      return;
+    }
+
+    setShowGmailTestConfirm(true);
+  };
+
+  const handleConfirmSendGmailTest = async () => {
+    setIsSendingGmailTest(true);
+    setShowGmailTestConfirm(false);
+    try {
+      const res = await sendGmailMessage({
+        accessToken: googleAccessToken!,
+        to: gmailTestRecipient.trim(),
+        subject: `Astrix Automation - Gmail API Test (${new Date().toLocaleTimeString()})`,
+        htmlBody: `
+          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff; color: #1e293b;">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px;">
+              <h2 style="color: #4f46e5; margin: 0; font-size: 20px;">Astrix Contact Automation</h2>
+            </div>
+            <p style="font-size: 15px; line-height: 1.5; color: #334155;">
+              🎉 <strong>Gmail API Integration Success!</strong>
+            </p>
+            <p style="font-size: 14px; line-height: 1.6; color: #475569;">
+              This email was dispatched in real-time through the official <strong>Google Workspace Gmail v1 REST API</strong>.
+            </p>
+            <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 16px; margin: 20px 0; font-size: 13px; line-height: 1.6;">
+              <div><strong>Sender Account:</strong> ${currentUser?.email || 'Connected Google Account'}</div>
+              <div><strong>Recipient:</strong> ${gmailTestRecipient.trim()}</div>
+              <div><strong>Dispatched At:</strong> ${new Date().toLocaleString()}</div>
+              <div><strong>Scope:</strong> https://www.googleapis.com/auth/gmail.send</div>
+            </div>
+            <hr style="border: 0; border-top: 1px solid #f1f5f9; margin: 24px 0;" />
+            <p style="font-size: 11px; color: #94a3b8; text-align: center; margin: 0;">
+              Sent via Astrix Automated Outreach Engine &bull; Zero Spam &bull; Authenticated Sender
+            </p>
+          </div>
+        `,
+        fromName: settings?.companyName || 'Astrix Automation',
+        replyTo: currentUser?.email || undefined,
+      });
+
+      success(
+        'Gmail API Test Dispatched!',
+        `Live message delivered to ${gmailTestRecipient.trim()} (Gmail Message ID: ${res.id}). Check your inbox!`
+      );
+    } catch (err: any) {
+      toastError('Gmail API Error', err?.message || 'Failed to dispatch email via Gmail API.');
+    } finally {
+      setIsSendingGmailTest(false);
     }
   };
 
@@ -671,6 +750,96 @@ export const SettingsPage: React.FC = () => {
             </div>
           </div>
 
+          {/* Google Workspace Gmail API Configuration */}
+          {settings.emailProvider === 'gmail_api' && (
+            <div className="p-5 rounded-xl bg-slate-950/80 border border-red-500/30 space-y-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl bg-red-950/20 border border-red-500/20">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/30 flex items-center justify-center text-red-400 font-bold">
+                    <Mail className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-xs font-bold text-white">Google Workspace Gmail API Status</h4>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        googleAccessToken
+                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                          : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                      }`}>
+                        {googleAccessToken ? '● Connected & Ready' : '○ Authorization Needed'}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Sender account: <span className="text-slate-200 font-medium">{currentUser?.email || 'No Google account linked'}</span> &bull; Scope: <code className="text-red-300">gmail.send</code>
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setIsAuthorizingGoogle(true);
+                    try {
+                      await requestGoogleWorkspaceAuth();
+                      success('Google Account Connected', 'Gmail send permissions successfully refreshed.');
+                    } catch (err: any) {
+                      toastError('Auth Failed', err?.message);
+                    } finally {
+                      setIsAuthorizingGoogle(false);
+                    }
+                  }}
+                  disabled={isAuthorizingGoogle}
+                  className="px-3.5 py-2 text-xs font-semibold rounded-xl bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 transition-colors flex items-center gap-2 disabled:opacity-50 shrink-0 cursor-pointer"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isAuthorizingGoogle ? 'animate-spin' : ''}`} />
+                  <span>{googleAccessToken ? 'Refresh Permissions' : 'Connect Google Account'}</span>
+                </button>
+              </div>
+
+              {/* Test Email Dispatch via Gmail API */}
+              <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-white flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-emerald-400" />
+                    Live Gmail API Dispatch Test
+                  </span>
+                  <span className="text-[10px] text-slate-400">100% Free &bull; Zero Server SMTP configuration needed</span>
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  Send a live test email directly through your authenticated Google Account via the Gmail API to verify inbox delivery.
+                </p>
+
+                <div className="flex flex-col sm:flex-row gap-2.5 pt-1">
+                  <input
+                    type="email"
+                    value={gmailTestRecipient}
+                    onChange={(e) => setGmailTestRecipient(e.target.value)}
+                    placeholder="Enter recipient email (e.g. bmmithun688@gmail.com)"
+                    className="flex-1 px-3.5 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-red-500 font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleInitiateGmailTestSend}
+                    disabled={isSendingGmailTest || isAuthorizingGoogle}
+                    className="flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white rounded-xl text-xs font-semibold shadow-lg shadow-red-500/20 transition-all disabled:opacity-50 cursor-pointer shrink-0"
+                  >
+                    {isSendingGmailTest ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>Sending...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Mail className="w-3.5 h-3.5" />
+                        <span>Send Test Email via Gmail</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Free Gmail App Password Configuration */}
           {settings.emailProvider === 'gmail_smtp' && (
             <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 space-y-4">
@@ -976,6 +1145,19 @@ export const SettingsPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Explicit Gmail API User Confirmation Modal (Google Workspace Integration requirement) */}
+      <GmailSendConfirmModal
+        isOpen={showGmailTestConfirm}
+        senderEmail={currentUser?.email || 'Connected Google Account'}
+        recipientsCount={1}
+        recipientSamples={[{ name: 'Test Contact', email: gmailTestRecipient }]}
+        subject={`Astrix Automation - Gmail API Test (${new Date().toLocaleTimeString()})`}
+        isBulk={false}
+        isLoading={isSendingGmailTest}
+        onConfirm={handleConfirmSendGmailTest}
+        onCancel={() => setShowGmailTestConfirm(false)}
+      />
     </div>
   );
 };
