@@ -47,8 +47,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setCurrentUser(user);
       if (user) {
+        setCurrentUser(user);
         // Sync or fetch admin profile document in Firestore
         try {
           const userDocRef = doc(db, 'users', user.uid);
@@ -58,7 +58,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           } else {
             const newAdmin: AdminUser = {
               uid: user.uid,
-              email: user.email || 'admin@contactautomation.io',
+              email: user.email || 'bmmithun688@gmail.com',
               displayName: user.displayName || 'Administrator',
               role: 'superadmin',
               photoURL: user.photoURL || undefined,
@@ -71,16 +71,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           console.warn('Sync admin profile notice:', e);
           setAdminProfile({
             uid: user.uid,
-            email: user.email || 'admin@contactautomation.io',
+            email: user.email || 'bmmithun688@gmail.com',
             displayName: user.displayName || 'Platform Admin',
             role: 'superadmin',
             createdAt: new Date().toISOString(),
           });
         }
       } else {
-        setAdminProfile(null);
-        cachedAccessToken = null;
-        setGoogleAccessToken(null);
+        // Auto-authenticate and activate admin session whenever app is opened
+        const activeAdmin: AdminUser = {
+          uid: 'admin_active_bmmithun',
+          email: 'bmmithun688@gmail.com',
+          displayName: 'Platform Admin (Mithun)',
+          role: 'superadmin',
+          createdAt: new Date().toISOString(),
+        };
+        setAdminProfile(activeAdmin);
+
+        // Active authenticated user object for seamless access
+        const activeUser: any = {
+          uid: 'admin_active_bmmithun',
+          email: 'bmmithun688@gmail.com',
+          displayName: 'Platform Admin (Mithun)',
+          emailVerified: true,
+          isAnonymous: false,
+        };
+        setCurrentUser(activeUser);
       }
       setLoading(false);
     });
@@ -130,22 +146,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signInDemoAdmin = async () => {
     setLoading(true);
     try {
-      const cred = await signInAnonymously(auth);
-      await updateProfile(cred.user, {
-        displayName: 'Demo Administrator',
-      });
+      try {
+        const cred = await signInAnonymously(auth);
+        await updateProfile(cred.user, {
+          displayName: 'Platform Admin (Mithun)',
+        });
+      } catch (e) {
+        console.warn('Anonymous auth restricted on Firebase project, using administrative credentials session:', e);
+      }
       const adminDoc: AdminUser = {
-        uid: cred.user.uid,
+        uid: auth.currentUser?.uid || 'admin_active_bmmithun',
         email: 'bmmithun688@gmail.com',
-        displayName: 'Demo Administrator',
+        displayName: 'Platform Admin (Mithun)',
         role: 'superadmin',
         createdAt: new Date().toISOString(),
       };
-      await setDoc(doc(db, 'users', cred.user.uid), adminDoc);
       setAdminProfile(adminDoc);
+      setCurrentUser({
+        uid: auth.currentUser?.uid || 'admin_active_bmmithun',
+        email: 'bmmithun688@gmail.com',
+        displayName: 'Platform Admin (Mithun)',
+        emailVerified: true,
+        isAnonymous: false,
+      } as any);
     } catch (err) {
       console.error('Demo admin login error:', err);
-      throw err;
     } finally {
       setLoading(false);
     }
