@@ -79,11 +79,13 @@ export async function createMessageLog(log: Omit<MessageLog, 'id'>): Promise<Mes
 /**
  * Fetches recent message logs
  */
-export async function fetchMessageLogs(maxResults = 100): Promise<MessageLog[]> {
+export async function fetchMessageLogs(maxResults = 100, userId?: string): Promise<MessageLog[]> {
   try {
     const q = query(collection(db, LOGS_COLLECTION), orderBy('scheduledAt', 'desc'), limit(maxResults));
     const snapshot = await getDocs(q);
-    return snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as MessageLog));
+    const logs = snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as MessageLog));
+    if (!userId) return logs;
+    return logs.filter((l) => !l.userId || l.userId === userId);
   } catch (error) {
     handleFirestoreError(error, OperationType.LIST, LOGS_COLLECTION);
   }
@@ -92,13 +94,17 @@ export async function fetchMessageLogs(maxResults = 100): Promise<MessageLog[]> 
 export function subscribeToMessageLogs(
   onUpdate: (logs: MessageLog[]) => void,
   maxResults = 100,
-  onError?: (err: Error) => void
+  onError?: (err: Error) => void,
+  userId?: string
 ) {
   const q = query(collection(db, LOGS_COLLECTION), orderBy('scheduledAt', 'desc'), limit(maxResults));
   return onSnapshot(
     q,
     (snapshot) => {
-      const logs = snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as MessageLog));
+      let logs = snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as MessageLog));
+      if (userId) {
+        logs = logs.filter((l) => !l.userId || l.userId === userId);
+      }
       onUpdate(logs);
     },
     (error) => {
@@ -121,12 +127,24 @@ export async function executeCampaignDelivery(
     useGmailApi?: boolean;
     gmailAccessToken?: string;
     senderEmail?: string;
+    userId?: string;
     onProgress?: (progress: { current: number; total: number; latestLog: MessageLog }) => void;
   } = {}
 ): Promise<CampaignExecutionResult> {
   const now = new Date();
   const monthCycle = options.targetMonthCycle || getMonthCycleKey(now);
   const executionLogs: MessageLog[] = [];
+  const logUserId = options.userId || campaign.userId;
+  const logSenderEmail = options.senderEmail || campaign.senderEmail;
+
+  // Helper to ensure userId and senderEmail are attached to every message log
+  const logMessage = async (entry: Omit<MessageLog, 'id'>): Promise<MessageLog> => {
+    return await createMessageLog({
+      ...entry,
+      userId: logUserId,
+      senderEmail: logSenderEmail,
+    });
+  };
 
   // Load configured company name and platform settings
   const platformSettings = await fetchSettings().catch(() => null);
@@ -145,7 +163,7 @@ export async function executeCampaignDelivery(
       for (const channel of campaign.channels) {
         progressStep++;
         const destination = channel === 'email' ? contact.email : normalizePhone(contact.phone) || contact.phone;
-        const log = await createMessageLog({
+        const log = await logMessage({
           campaignId: campaign.id,
           campaignName: campaign.name,
           contactId: contact.id,
@@ -173,7 +191,7 @@ export async function executeCampaignDelivery(
       if (channel === 'email') {
         destination = (contact.email || '').trim().toLowerCase();
         if (!destination || !destination.includes('@')) {
-          const log = await createMessageLog({
+          const log = await logMessage({
             campaignId: campaign.id,
             campaignName: campaign.name,
             contactId: contact.id,
@@ -197,7 +215,7 @@ export async function executeCampaignDelivery(
         const normalized = normalizePhone(contact.phone);
         destination = normalized || contact.phone?.trim();
         if (!destination) {
-          const log = await createMessageLog({
+          const log = await logMessage({
             campaignId: campaign.id,
             campaignName: campaign.name,
             contactId: contact.id,
@@ -229,7 +247,7 @@ export async function executeCampaignDelivery(
 
         if (processed) {
           // Record skipped duplicate log
-          const log = await createMessageLog({
+          const log = await logMessage({
             campaignId: campaign.id,
             campaignName: campaign.name,
             contactId: contact.id,
@@ -295,7 +313,7 @@ export async function executeCampaignDelivery(
             replyTo: options.senderEmail,
           });
 
-          const log = await createMessageLog({
+          const log = await logMessage({
             campaignId: campaign.id,
             campaignName: campaign.name,
             contactId: contact.id,
@@ -316,7 +334,7 @@ export async function executeCampaignDelivery(
           options.onProgress?.({ current: progressStep, total: totalChannelsCount, latestLog: log });
           continue;
         } catch (err: any) {
-          const log = await createMessageLog({
+          const log = await logMessage({
             campaignId: campaign.id,
             campaignName: campaign.name,
             contactId: contact.id,
@@ -352,7 +370,7 @@ export async function executeCampaignDelivery(
         // Artificial microscopic delay for natural feel in UI progress
         await new Promise((res) => setTimeout(res, 80));
 
-        const log = await createMessageLog({
+        const log = await logMessage({
           campaignId: campaign.id,
           campaignName: campaign.name,
           contactId: contact.id,

@@ -27,6 +27,7 @@ import {
 import { fetchContacts } from '../services/contactService';
 import { executeCampaignDelivery, CampaignExecutionResult } from '../services/schedulerService';
 import { useToast } from '../contexts/ToastContext';
+import { useAuth } from '../contexts/AuthContext';
 import { ActivePage } from '../components/layout/AppLayout';
 
 interface CampaignsPageProps {
@@ -35,6 +36,7 @@ interface CampaignsPageProps {
 
 export const CampaignsPage: React.FC<CampaignsPageProps> = ({ onNavigate }) => {
   const { success, error: toastError, info } = useToast();
+  const { currentUser } = useAuth();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [executingCampaignId, setExecutingCampaignId] = useState<string | null>(null);
@@ -42,10 +44,10 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({ onNavigate }) => {
   const [campaignToDelete, setCampaignToDelete] = useState<Campaign | null>(null);
 
   useEffect(() => {
-    const unsub = subscribeToCampaigns(setCampaigns);
-    fetchContacts().then(setContacts);
+    const unsub = subscribeToCampaigns(setCampaigns, undefined, currentUser?.uid);
+    fetchContacts(currentUser?.uid).then(setContacts);
     return () => unsub();
-  }, []);
+  }, [currentUser?.uid]);
 
   const handleToggleActive = async (campaign: Campaign, e: React.MouseEvent) => {
     e.stopPropagation();

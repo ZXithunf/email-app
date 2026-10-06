@@ -41,8 +41,9 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   onNavigate,
   children,
 }) => {
-  const { adminProfile, currentUser, logout } = useAuth();
+  const { adminProfile, currentUser, savedAccounts, switchUser, logout } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [showAccountMenu, setShowAccountMenu] = useState(false);
 
   const navItems: {
     id: ActivePage;
@@ -146,24 +147,83 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
           })}
         </nav>
 
-        {/* Admin profile & sign out */}
-        <div className="p-3 border-t border-slate-800/80 bg-slate-900/50">
-          <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-slate-800/50 border border-slate-800">
-            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-600 to-purple-700 flex items-center justify-center text-sm font-bold text-white shrink-0">
-              {adminProfile?.displayName?.charAt(0).toUpperCase() || 'A'}
+        {/* User profile & account switching */}
+        <div className="p-3 border-t border-slate-800/80 bg-slate-900/50 relative">
+          {showAccountMenu && (
+            <div className="absolute bottom-full left-3 right-3 mb-2 p-3 bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl z-50 space-y-2">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                <span className="text-[11px] font-bold text-white uppercase tracking-wider">
+                  Accounts on this device
+                </span>
+                <button
+                  onClick={() => setShowAccountMenu(false)}
+                  className="text-slate-400 hover:text-white text-xs"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              <div className="space-y-1 max-h-40 overflow-y-auto">
+                {savedAccounts.map((acc) => {
+                  const isCurrent = acc.uid === currentUser?.uid;
+                  return (
+                    <button
+                      key={acc.uid}
+                      onClick={() => {
+                        switchUser(acc.uid);
+                        setShowAccountMenu(false);
+                      }}
+                      className={`w-full flex items-center justify-between p-2 rounded-lg text-left text-xs transition-colors ${
+                        isCurrent
+                          ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/40'
+                          : 'hover:bg-slate-800 text-slate-300'
+                      }`}
+                    >
+                      <div className="truncate">
+                        <p className="font-semibold truncate">{acc.displayName || acc.email}</p>
+                        <p className="text-[10px] text-slate-400 truncate">{acc.email}</p>
+                      </div>
+                      {isCurrent && <CheckCircle className="w-3.5 h-3.5 text-indigo-400 shrink-0" />}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <button
+                onClick={() => {
+                  setShowAccountMenu(false);
+                  logout();
+                }}
+                className="w-full py-1.5 px-2.5 rounded-lg bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-300 border border-indigo-500/30 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
+              >
+                <PlusCircle className="w-3.5 h-3.5" />
+                Register New User Account
+              </button>
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold text-white truncate">
-                {adminProfile?.displayName || 'Administrator'}
-              </p>
-              <p className="text-[11px] text-slate-400 truncate">
-                {currentUser?.email || adminProfile?.email || 'admin@domain.com'}
-              </p>
-            </div>
+          )}
+
+          <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-slate-800/60 border border-slate-800 hover:border-slate-700 transition-all">
+            <button
+              onClick={() => setShowAccountMenu(!showAccountMenu)}
+              title="Click to switch accounts or register another user"
+              className="flex items-center gap-2.5 flex-1 min-w-0 text-left cursor-pointer group"
+            >
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-600 to-purple-700 flex items-center justify-center text-xs font-bold text-white shrink-0 shadow-sm shadow-indigo-600/30">
+                {adminProfile?.displayName?.charAt(0).toUpperCase() || 'U'}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-white truncate group-hover:text-indigo-300 transition-colors">
+                  {adminProfile?.displayName || 'User'}
+                </p>
+                <p className="text-[10px] text-slate-400 truncate">
+                  {currentUser?.email || adminProfile?.email || 'user@domain.com'}
+                </p>
+              </div>
+            </button>
             <button
               onClick={() => logout()}
               title="Sign Out"
-              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-700/50 transition-colors"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors shrink-0"
             >
               <LogOut className="w-4 h-4" />
             </button>
@@ -174,23 +234,30 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
         {/* Top Header Bar for Desktop */}
-        <header className="hidden md:flex items-center justify-between px-8 py-4 bg-slate-900/60 backdrop-blur-md border-b border-slate-800/80 sticky top-0 z-20">
+        <header className="hidden md:flex items-center justify-between px-8 py-3.5 bg-slate-900/60 backdrop-blur-md border-b border-slate-800/80 sticky top-0 z-20">
           <div className="flex items-center gap-3">
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
               <CheckCircle className="w-3.5 h-3.5" />
-              Scheduler Active (Cloud SES & Twilio)
+              Private Workspace Active
             </span>
-            <span className="text-xs text-slate-400">|</span>
-            <span className="text-xs text-slate-400 flex items-center gap-1">
-              <ShieldCheck className="w-3.5 h-3.5 text-indigo-400" />
-              Role: {adminProfile?.role || 'Administrator'}
+            <span className="text-xs text-slate-500">|</span>
+            <span className="text-xs text-slate-300 flex items-center gap-1.5 font-medium">
+              <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
+              Sender: <strong className="text-white">{currentUser?.email || adminProfile?.email}</strong>
             </span>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
+            <button
+              onClick={() => logout()}
+              className="px-3 py-1.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg border border-slate-700/70 transition-colors flex items-center gap-1.5"
+            >
+              <PlusCircle className="w-3.5 h-3.5 text-indigo-400" />
+              Register / Switch User
+            </button>
             <button
               onClick={() => onNavigate('import-contacts')}
-              className="px-3.5 py-1.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg border border-slate-700/70 transition-colors flex items-center gap-2"
+              className="px-3 py-1.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg border border-slate-700/70 transition-colors flex items-center gap-2"
             >
               <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
               Import Excel

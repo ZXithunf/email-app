@@ -55,7 +55,7 @@ export const SettingsPage: React.FC = () => {
 
   // Google Workspace & Gmail API state
   const { currentUser, googleAccessToken, requestGoogleWorkspaceAuth } = useAuth();
-  const [gmailTestRecipient, setGmailTestRecipient] = useState('bmmithun688@gmail.com');
+  const [gmailTestRecipient, setGmailTestRecipient] = useState(currentUser?.email || 'user@example.com');
   const [isSendingGmailTest, setIsSendingGmailTest] = useState(false);
   const [showGmailTestConfirm, setShowGmailTestConfirm] = useState(false);
   const [isAuthorizingGoogle, setIsAuthorizingGoogle] = useState(false);

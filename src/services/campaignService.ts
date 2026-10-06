@@ -141,11 +141,13 @@ export function getMonthCycleKey(date: Date = new Date()): string {
 
 export const formatMonthlyCycleKey = getMonthCycleKey;
 
-export async function fetchCampaigns(): Promise<Campaign[]> {
+export async function fetchCampaigns(userId?: string): Promise<Campaign[]> {
   try {
     const q = query(collection(db, CAMPAIGNS_COLLECTION), orderBy('createdAt', 'desc'));
     const snapshot = await getDocs(q);
-    return snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as Campaign));
+    const campaigns = snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as Campaign));
+    if (!userId) return campaigns;
+    return campaigns.filter((c) => !c.userId || c.userId === userId);
   } catch (error) {
     handleFirestoreError(error, OperationType.LIST, CAMPAIGNS_COLLECTION);
   }
@@ -153,13 +155,17 @@ export async function fetchCampaigns(): Promise<Campaign[]> {
 
 export function subscribeToCampaigns(
   onUpdate: (campaigns: Campaign[]) => void,
-  onError?: (err: Error) => void
+  onError?: (err: Error) => void,
+  userId?: string
 ) {
   const q = query(collection(db, CAMPAIGNS_COLLECTION), orderBy('createdAt', 'desc'));
   return onSnapshot(
     q,
     (snapshot) => {
-      const campaigns = snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as Campaign));
+      let campaigns = snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as Campaign));
+      if (userId) {
+        campaigns = campaigns.filter((c) => !c.userId || c.userId === userId);
+      }
       onUpdate(campaigns);
     },
     (error) => {

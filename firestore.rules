@@ -51,8 +51,8 @@ service cloud.firestore {
 
     // Users
     match /users/{userId} {
-      allow read: if isSignedIn();
-      allow write: if isSignedIn() && (request.auth.uid == userId);
+      allow read: if true;
+      allow write: if true;
     }
 
     // Contacts
@@ -60,42 +60,41 @@ service cloud.firestore {
       allow read: if true;
       allow create: if isValidContact(request.resource.data);
       allow update: if isValidContact(request.resource.data);
-      allow delete: if isSignedIn();
+      allow delete: if true;
     }
 
     // Campaigns
     match /campaigns/{campaignId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn() && isValidCampaign(request.resource.data);
-      allow update: if isSignedIn() && isValidCampaign(request.resource.data);
-      allow delete: if isSignedIn();
+      allow read: if true;
+      allow create: if isValidCampaign(request.resource.data);
+      allow update: if isValidCampaign(request.resource.data);
+      allow delete: if true;
     }
 
     // Campaign Recipients
     match /campaignRecipients/{recipientId} {
-      allow read: if isSignedIn();
-      allow create, update, delete: if isSignedIn();
+      allow read, write: if true;
     }
 
     // Message Logs (Immutable audit trail)
     match /messageLogs/{logId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn() && isValidMessageLog(request.resource.data);
+      allow read: if true;
+      allow create: if isValidMessageLog(request.resource.data);
       allow update, delete: if false;
     }
 
     // Templates
     match /templates/{templateId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn() && isValidTemplate(request.resource.data);
-      allow update: if isSignedIn() && isValidTemplate(request.resource.data);
-      allow delete: if isSignedIn();
+      allow read: if true;
+      allow create: if isValidTemplate(request.resource.data);
+      allow update: if isValidTemplate(request.resource.data);
+      allow delete: if true;
     }
 
     // Settings
     match /settings/{settingId} {
-      allow read: if isSignedIn();
-      allow create, update: if isSignedIn();
+      allow read: if true;
+      allow create, update: if true;
       allow delete: if false;
     }
   }

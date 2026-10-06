@@ -19,9 +19,11 @@ import * as XLSX from 'xlsx';
 import { MessageLog, ChannelType, MessageLogStatus } from '../types';
 import { subscribeToMessageLogs } from '../services/schedulerService';
 import { useToast } from '../contexts/ToastContext';
+import { useAuth } from '../contexts/AuthContext';
 
 export const MessageLogsPage: React.FC = () => {
   const { info } = useToast();
+  const { currentUser } = useAuth();
   const [logs, setLogs] = useState<MessageLog[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedChannel, setSelectedChannel] = useState<string>('all');
@@ -29,9 +31,9 @@ export const MessageLogsPage: React.FC = () => {
   const [inspectingLog, setInspectingLog] = useState<MessageLog | null>(null);
 
   useEffect(() => {
-    const unsub = subscribeToMessageLogs(setLogs, 200);
+    const unsub = subscribeToMessageLogs(setLogs, 200, undefined, currentUser?.uid);
     return () => unsub();
-  }, []);
+  }, [currentUser?.uid]);
 
   const filteredLogs = useMemo(() => {
     return logs.filter((l) => {

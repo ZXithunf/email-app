@@ -21,6 +21,7 @@ import { subscribeToContacts } from '../services/contactService';
 import { subscribeToCampaigns } from '../services/campaignService';
 import { subscribeToMessageLogs, executeCampaignDelivery } from '../services/schedulerService';
 import { useToast } from '../contexts/ToastContext';
+import { useAuth } from '../contexts/AuthContext';
 import { ActivePage } from '../components/layout/AppLayout';
 import { getTimezoneShortLabel, isIndianTimezone } from '../utils/timezoneUtils';
 import { CampaignPerformanceCard } from '../components/dashboard/CampaignPerformanceCard';
@@ -31,22 +32,23 @@ interface DashboardPageProps {
 
 export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
   const { success, error: toastError } = useToast();
+  const { currentUser } = useAuth();
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [logs, setLogs] = useState<MessageLog[]>([]);
   const [isRunningScheduler, setIsRunningScheduler] = useState(false);
 
   useEffect(() => {
-    const unsubContacts = subscribeToContacts(setContacts);
-    const unsubCampaigns = subscribeToCampaigns(setCampaigns);
-    const unsubLogs = subscribeToMessageLogs(setLogs, 150);
+    const unsubContacts = subscribeToContacts(setContacts, undefined, currentUser?.uid);
+    const unsubCampaigns = subscribeToCampaigns(setCampaigns, undefined, currentUser?.uid);
+    const unsubLogs = subscribeToMessageLogs(setLogs, 150, undefined, currentUser?.uid);
 
     return () => {
       unsubContacts();
       unsubCampaigns();
       unsubLogs();
     };
-  }, []);
+  }, [currentUser?.uid]);
 
   const totalContacts = contacts.length;
   const activeCampaigns = campaigns.filter((c) => c.active).length;

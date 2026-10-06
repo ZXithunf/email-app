@@ -50,6 +50,7 @@ export const CampaignDetailsPage: React.FC<CampaignDetailsPageProps> = ({
   onNavigate,
 }) => {
   const { success, error: toastError, info } = useToast();
+  const { currentUser, googleAccessToken, requestGoogleWorkspaceAuth } = useAuth();
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [logs, setLogs] = useState<MessageLog[]>([]);
@@ -63,14 +64,13 @@ export const CampaignDetailsPage: React.FC<CampaignDetailsPageProps> = ({
   // Force re-send & Direct Test Dispatch
   const [forceResend, setForceResend] = useState(false);
   const [showTestModal, setShowTestModal] = useState(false);
-  const [testEmail, setTestEmail] = useState('bmmithun688@gmail.com');
+  const [testEmail, setTestEmail] = useState(currentUser?.email || 'user@example.com');
   const [testPhone, setTestPhone] = useState('+91');
   const [testChannel, setTestChannel] = useState<'whatsapp' | 'email' | 'sms'>('whatsapp');
   const [testSendViaGmail, setTestSendViaGmail] = useState(true);
   const [isSendingTest, setIsSendingTest] = useState(false);
 
   // Gmail API Auth & Explicit Confirmation Modal State
-  const { currentUser, googleAccessToken, requestGoogleWorkspaceAuth } = useAuth();
   const [showGmailConfirmModal, setShowGmailConfirmModal] = useState(false);
   const [gmailConfirmMode, setGmailConfirmMode] = useState<'campaign' | 'test'>('campaign');
   const [isConnectingGoogle, setIsConnectingGoogle] = useState(false);
@@ -84,15 +84,15 @@ export const CampaignDetailsPage: React.FC<CampaignDetailsPageProps> = ({
 
   useEffect(() => {
     loadData();
-  }, [campaignId]);
+  }, [campaignId, currentUser?.uid]);
 
   const loadData = async () => {
     setLoading(true);
     try {
       const [camp, allContacts, allLogs] = await Promise.all([
         getCampaignById(campaignId),
-        fetchContacts(),
-        fetchMessageLogs(200),
+        fetchContacts(currentUser?.uid),
+        fetchMessageLogs(200, currentUser?.uid),
       ]);
       setCampaign(camp);
       if (camp) {
@@ -186,17 +186,19 @@ export const CampaignDetailsPage: React.FC<CampaignDetailsPageProps> = ({
       const res = await executeCampaignDelivery(campaign, targetRecipients, {
         forceResend,
         companyName: 'Astrix',
+        userId: currentUser?.uid,
+        senderEmail: currentUser?.email || campaign?.senderEmail || undefined,
       });
       setLastExecution(res);
       success(
         'Campaign Executed by Astrix',
-        `Dispatched ${res.sentCount} message(s). ${res.skippedDuplicateCount} duplicates suppressed${
+        `Dispatched ${res.sentCount} message(s) from ${currentUser?.email || 'your account'}. ${res.skippedDuplicateCount} duplicates suppressed${
           forceResend ? ' (Force Re-send applied)' : ''
         }.`
       );
       // Reload logs
-      const updatedLogs = await fetchMessageLogs(200);
-      setLogs(updatedLogs.filter((l) => l.campaignId === campaign.id));
+      const updatedLogs = await fetchMessageLogs(200, currentUser?.uid);
+      setLogs((updatedLogs || []).filter((l) => l.campaignId === campaign.id));
     } catch (err: any) {
       toastError('Execution Error', err?.message);
     } finally {
@@ -239,15 +241,16 @@ export const CampaignDetailsPage: React.FC<CampaignDetailsPageProps> = ({
           companyName: 'Astrix',
           useGmailApi: true,
           gmailAccessToken: googleAccessToken || undefined,
-          senderEmail: currentUser?.email || undefined,
+          senderEmail: currentUser?.email || campaign?.senderEmail || undefined,
+          userId: currentUser?.uid,
         });
         setLastExecution(res);
         success(
           'Dispatched via Gmail API',
-          `Successfully dispatched ${res.sentCount} emails directly through your Google Workspace account! Check your Gmail Sent folder.`
+          `Successfully dispatched ${res.sentCount} emails directly through your Google Workspace account (${currentUser?.email})! Check your Gmail Sent folder.`
         );
-        const updatedLogs = await fetchMessageLogs(200);
-        setLogs(updatedLogs.filter((l) => l.campaignId === campaign.id));
+        const updatedLogs = await fetchMessageLogs(200, currentUser?.uid);
+        setLogs((updatedLogs || []).filter((l) => l.campaignId === campaign.id));
       } catch (err: any) {
         toastError('Gmail Dispatch Error', err?.message);
       } finally {

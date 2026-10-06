@@ -12,6 +12,8 @@ export interface Contact {
   status: ContactStatus;
   consentGiven: boolean;
   source?: string;
+  userId?: string;
+  ownerEmail?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -65,6 +67,10 @@ export interface Campaign {
   active: boolean;
   lastSentAt?: string;
   nextSendAt: string;
+  userId?: string;
+  ownerEmail?: string;
+  senderEmail?: string;
+  senderName?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -92,6 +98,8 @@ export interface MessageLog {
   provider: 'amazon_ses' | 'twilio' | 'simulator' | 'gmail_api';
   providerMessageId?: string;
   companySender?: string; // e.g. "Astrix"
+  senderEmail?: string; // User email who dispatched this message
+  userId?: string; // User ID who dispatched this message
   directActionUrl?: string; // One-click dispatch link (WhatsApp Web / mailto / Gmail)
   monthCycle: string; // e.g. "2026-09"
   status: MessageLogStatus;
@@ -146,10 +154,14 @@ export interface AdminUser {
   uid: string;
   email: string;
   displayName: string;
-  role: 'admin' | 'superadmin';
+  role: 'user' | 'admin' | 'superadmin';
+  companyName?: string;
+  senderEmail?: string;
   photoURL?: string;
   createdAt: string;
 }
+
+export type AppUser = AdminUser;
 
 export interface DashboardStats {
   totalContacts: number;

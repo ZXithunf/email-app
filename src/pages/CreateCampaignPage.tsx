@@ -20,6 +20,7 @@ import { fetchContacts } from '../services/contactService';
 import { fetchTemplates } from '../services/templateService';
 import { uploadCampaignImage } from '../services/storageService';
 import { useToast } from '../contexts/ToastContext';
+import { useAuth } from '../contexts/AuthContext';
 import { ActivePage } from '../components/layout/AppLayout';
 import {
   TIMEZONE_OPTIONS,
@@ -35,6 +36,7 @@ interface CreateCampaignPageProps {
 
 export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onNavigate }) => {
   const { success, error: toastError } = useToast();
+  const { currentUser } = useAuth();
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [templates, setTemplates] = useState<MessageTemplate[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -68,9 +70,9 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onNaviga
   const [active, setActive] = useState(true);
 
   useEffect(() => {
-    fetchContacts().then((res) => setContacts(res || []));
+    fetchContacts(currentUser?.uid).then((res) => setContacts(res || []));
     fetchTemplates().then((res) => setTemplates(res || []));
-  }, []);
+  }, [currentUser?.uid]);
 
   // Compute unique tags and companies
   const availableTags = useMemo(() => {
@@ -218,6 +220,10 @@ export const CreateCampaignPage: React.FC<CreateCampaignPageProps> = ({ onNaviga
         monthlyRecurrence,
         dayOfMonth,
         active,
+        userId: currentUser?.uid,
+        ownerEmail: currentUser?.email || undefined,
+        senderEmail: currentUser?.email || undefined,
+        senderName: currentUser?.displayName || undefined,
       };
 
       if (emailImageUrl.trim()) {

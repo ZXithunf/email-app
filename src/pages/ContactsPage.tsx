@@ -77,9 +77,9 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ onNavigate }) => {
   });
 
   useEffect(() => {
-    const unsub = subscribeToContacts(setContacts);
+    const unsub = subscribeToContacts(setContacts, undefined, currentUser?.uid);
     return () => unsub();
-  }, []);
+  }, [currentUser?.uid]);
 
   // Compute available tags for filter
   const allTags = useMemo(() => {
@@ -211,16 +211,20 @@ export const ContactsPage: React.FC<ContactsPageProps> = ({ onNavigate }) => {
         });
         success('Contact Updated', `Updated details for ${formData.name}`);
       } else {
-        await addContact({
-          name: formData.name.trim(),
-          email: formData.email.trim().toLowerCase(),
-          phone: normalizedPhone,
-          company: formData.company.trim(),
-          tags: tagsArray,
-          status: formData.status,
-          consentGiven: formData.consentGiven,
-          source: 'manual',
-        });
+        await addContact(
+          {
+            name: formData.name.trim(),
+            email: formData.email.trim().toLowerCase(),
+            phone: normalizedPhone,
+            company: formData.company.trim(),
+            tags: tagsArray,
+            status: formData.status,
+            consentGiven: formData.consentGiven,
+            source: 'manual',
+          },
+          currentUser?.uid,
+          currentUser?.email || undefined
+        );
         success('Contact Added', `Created contact for ${formData.name}`);
       }
       setIsAddModalOpen(false);

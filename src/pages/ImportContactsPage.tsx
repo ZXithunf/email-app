@@ -36,6 +36,7 @@ import {
 import { fetchContacts, bulkImportValidatedContacts } from '../services/contactService';
 import { Contact, ValidatedImportRecord } from '../types';
 import { useToast } from '../contexts/ToastContext';
+import { useAuth } from '../contexts/AuthContext';
 import { ActivePage } from '../components/layout/AppLayout';
 
 interface ImportContactsPageProps {
@@ -44,6 +45,7 @@ interface ImportContactsPageProps {
 
 export const ImportContactsPage: React.FC<ImportContactsPageProps> = ({ onNavigate }) => {
   const { success, error: toastError, info } = useToast();
+  const { currentUser } = useAuth();
   const [existingContacts, setExistingContacts] = useState<Contact[]>([]);
   const [file, setFile] = useState<File | null>(null);
   const [fileBuffer, setFileBuffer] = useState<ArrayBuffer | null>(null);
@@ -77,10 +79,10 @@ export const ImportContactsPage: React.FC<ImportContactsPageProps> = ({ onNaviga
   const [updatedCount, setUpdatedCount] = useState<number>(0);
 
   useEffect(() => {
-    fetchContacts()
+    fetchContacts(currentUser?.uid)
       .then((c) => setExistingContacts(c || []))
       .catch((err) => console.warn('Could not prefetch existing contacts:', err));
-  }, []);
+  }, [currentUser?.uid]);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files?.[0];
@@ -307,6 +309,8 @@ export const ImportContactsPage: React.FC<ImportContactsPageProps> = ({ onNaviga
         {
           updateExisting,
           existingContacts,
+          userId: currentUser?.uid,
+          ownerEmail: currentUser?.email || undefined,
           onProgress: (p) => setImportProgress(p),
         }
       );
@@ -317,13 +321,13 @@ export const ImportContactsPage: React.FC<ImportContactsPageProps> = ({ onNaviga
 
       const msg =
         res.updatedCount > 0
-          ? `Imported ${res.importedCount} new contacts and updated ${res.updatedCount} existing records.`
-          : `Successfully imported ${res.importedCount} contacts into Firestore.`;
+          ? `Imported ${res.importedCount} new contacts and updated ${res.updatedCount} existing records for ${currentUser?.email || 'your account'}.`
+          : `Successfully imported ${res.importedCount} contacts into your private database.`;
 
       success('Import Finished!', msg);
 
       // Refresh local contacts list
-      fetchContacts().then((c) => setExistingContacts(c || []));
+      fetchContacts(currentUser?.uid).then((c) => setExistingContacts(c || []));
     } catch (err: any) {
       toastError('Import Failed', err?.message || 'An error occurred writing records to Firestore.');
     } finally {

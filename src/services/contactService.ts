@@ -38,20 +38,29 @@ function saveLocalContacts(contacts: Contact[]): void {
 }
 
 // Global in-memory subscribers for immediate local UI sync
-const localSubscribers = new Set<(contacts: Contact[]) => void>();
+interface SubscriberInfo {
+  callback: (contacts: Contact[]) => void;
+  userId?: string;
+}
+const localSubscribers = new Set<SubscriberInfo>();
+
+function filterContactsForUser(contacts: Contact[], userId?: string): Contact[] {
+  if (!userId) return contacts;
+  return contacts.filter((c) => !c.userId || c.userId === userId);
+}
 
 function notifySubscribers(contacts: Contact[]) {
   saveLocalContacts(contacts);
-  localSubscribers.forEach((cb) => {
+  localSubscribers.forEach((sub) => {
     try {
-      cb(contacts);
+      sub.callback(filterContactsForUser(contacts, sub.userId));
     } catch (e) {
       console.warn('Subscriber notification notice:', e);
     }
   });
 }
 
-export async function fetchContacts(): Promise<Contact[]> {
+export async function fetchContacts(userId?: string): Promise<Contact[]> {
   try {
     const q = query(collection(db, CONTACTS_COLLECTION), orderBy('createdAt', 'desc'));
     // Timeout of 3.5s so fetch never hangs if Firestore API is disabled or offline
@@ -64,23 +73,26 @@ export async function fetchContacts(): Promise<Contact[]> {
     if (contacts.length > 0) {
       saveLocalContacts(contacts);
     }
-    return contacts.length > 0 ? contacts : getLocalContacts();
+    const all = contacts.length > 0 ? contacts : getLocalContacts();
+    return filterContactsForUser(all, userId);
   } catch (error) {
     console.warn('fetchContacts fallback to local cache:', error);
-    return getLocalContacts();
+    return filterContactsForUser(getLocalContacts(), userId);
   }
 }
 
 export function subscribeToContacts(
   onUpdate: (contacts: Contact[]) => void,
-  onError?: (err: Error) => void
+  onError?: (err: Error) => void,
+  userId?: string
 ) {
   // 1. Immediately emit cached local contacts so UI renders in 0ms
   const initial = getLocalContacts();
-  onUpdate(initial);
+  onUpdate(filterContactsForUser(initial, userId));
 
   // Register in local subscribers
-  localSubscribers.add(onUpdate);
+  const subInfo: SubscriberInfo = { callback: onUpdate, userId };
+  localSubscribers.add(subInfo);
 
   // 2. Attach live Firestore listener
   try {
@@ -91,11 +103,11 @@ export function subscribeToContacts(
         const contacts = snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as Contact));
         if (contacts.length > 0) {
           saveLocalContacts(contacts);
-          onUpdate(contacts);
+          onUpdate(filterContactsForUser(contacts, userId));
         } else {
           // If Firestore is empty but local has data, preserve local data
           const local = getLocalContacts();
-          if (local.length > 0) onUpdate(local);
+          if (local.length > 0) onUpdate(filterContactsForUser(local, userId));
         }
       },
       (error) => {
@@ -105,19 +117,23 @@ export function subscribeToContacts(
     );
 
     return () => {
-      localSubscribers.delete(onUpdate);
+      localSubscribers.delete(subInfo);
       try {
         unsub();
       } catch {}
     };
   } catch (e) {
     return () => {
-      localSubscribers.delete(onUpdate);
+      localSubscribers.delete(subInfo);
     };
   }
 }
 
-export async function addContact(data: Omit<Contact, 'id' | 'createdAt' | 'updatedAt'>): Promise<Contact> {
+export async function addContact(
+  data: Omit<Contact, 'id' | 'createdAt' | 'updatedAt'>,
+  userId?: string,
+  ownerEmail?: string
+): Promise<Contact> {
   const contactId = doc(collection(db, CONTACTS_COLLECTION)).id;
   const now = new Date().toISOString();
   let email = (data.email || '').trim().toLowerCase();
@@ -133,6 +149,8 @@ export async function addContact(data: Omit<Contact, 'id' | 'createdAt' | 'updat
     status: data.status || 'subscribed',
     tags: Array.isArray(data.tags) ? data.tags : [],
     id: contactId,
+    userId: userId || data.userId,
+    ownerEmail: ownerEmail || data.ownerEmail,
     createdAt: now,
     updatedAt: now,
   };
@@ -218,6 +236,8 @@ export async function bulkImportValidatedContacts(
   options: {
     updateExisting?: boolean;
     existingContacts?: Contact[];
+    userId?: string;
+    ownerEmail?: string;
     onProgress?: (progress: { current: number; total: number; percentage: number }) => void;
   } = {}
 ): Promise<{ importedCount: number; updatedCount: number }> {
@@ -268,6 +288,8 @@ export async function bulkImportValidatedContacts(
         phone: cleanPhone || existing.phone,
         company: cleanCompany || existing.company,
         tags: Array.from(new Set([...existing.tags, ...cleanTags])),
+        userId: options.userId || existing.userId,
+        ownerEmail: options.ownerEmail || existing.ownerEmail,
         updatedAt: now,
       };
       contactsMap.set(cleanEmail, mergedContact);
@@ -284,6 +306,8 @@ export async function bulkImportValidatedContacts(
         status: 'subscribed',
         consentGiven: true,
         source: sourceFileName,
+        userId: options.userId,
+        ownerEmail: options.ownerEmail,
         createdAt: now,
         updatedAt: now,
       };
